@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Team</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="logo">
+          <h2>smartshift</h2>
+        </div>
+
+        <nav class="nav-menu">
+          <a href="dashboard.html" class="nav-link">📊 Overview</a>
+          <a href="team.html" class="nav-link active">👥 Team</a>
+        </nav>
+
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="userName">Loading...</span>
+            <span class="user-role" id="userRole">Loading...</span>
+          </div>
+          <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main class="main-content">
+        <header class="top-bar">
+          <h1>Team</h1>
+          <div class="branch-info">
+            <span>Welcome, <strong id="topBarName">User</strong></span>
+          </div>
+        </header>
+
+        <div class="welcome-section">
+          <h2>👥 Crew Members</h2>
+          <p>
+            Listahan ng mga crew na naka-group base sa kanilang skill/position.
+          </p>
+        </div>
+
+        <!-- Container kung saan ipapasok ang grouped crew -->
+        <div id="grouped-crew-container">
+          <p>Loading crew...</p>
+        </div>
+      </main>
+    </div>
+
+    <script src="../assets/js/team.js"></script>
+  </body>
+</html>

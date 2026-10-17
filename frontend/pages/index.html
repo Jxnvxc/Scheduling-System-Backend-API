@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Login</title>
+    <link rel="stylesheet" href="../assets/css/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="form-box">
+        <h1>Scheduling System</h1>
+        <h2>Login</h2>
+
+        <form id="loginForm">
+          <div class="input-group">
+            <label for="email">Email</label>
+            <input
+              type="email"
+              id="email"
+              placeholder="janvic@example.com"
+              required
+            />
+          </div>
+          <div class="input-group">
+            <label for="password">Password</label>
+            <input
+              type="password"
+              id="password"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <button type="submit" class="btn-primary">Login</button>
+        </form>
+
+        <p class="link">
+          Wala pang account? <a href="register.html">Mag-register dito</a>
+        </p>
+        <div id="message" class="message"></div>
+      </div>
+    </div>
+
+   <script src="../assets/js/auth.js"></script>
+  </body>
+</html>

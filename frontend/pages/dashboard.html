@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Dashboard</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="logo">
+          <h2>smartshift</h2>
+        </div>
+
+        <nav class="nav-menu">
+          <!-- ADMIN ONLY -->
+          <a href="#" class="nav-link admin-only">👑 Admin Panel</a>
+          <a href="#" class="nav-link admin-only">🏢 Manage Brands</a>
+
+          <!-- ADMIN + MANAGER -->
+          <a href="#" class="nav-link manager-only">📊 Overview</a>
+          <a href="#" class="nav-link manager-only">🏬 Branches</a>
+          <a href="team.html" class="nav-link manager-only">👥 Team</a>
+          <a href="#" class="nav-link manager-only">📅 Schedules</a>
+
+          <!-- LAHAT (Employee included) -->
+          <a href="#" class="nav-link employee-only">🕒 My Schedule</a>
+          <a href="#" class="nav-link employee-only">✅ My Availability</a>
+          <a href="#" class="nav-link employee-only">🔄 Request Swap</a>
+          <a href="change-password.html" class="nav-link">🔒 Change Password</a>
+        </nav>
+
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="userName">Loading...</span>
+            <span class="user-role" id="userRole">Loading...</span>
+          </div>
+          <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main class="main-content">
+        <header class="top-bar">
+          <h1>Dashboard</h1>
+          <div class="branch-info">
+            <span>Welcome, <strong id="topBarName">User</strong></span>
+          </div>
+        </header>
+
+        <!-- ============================================ -->
+        <!-- ADMIN SECTION (Admin lang ang nakakakita)    -->
+        <!-- ============================================ -->
+        <section class="role-section admin-only">
+          <div class="welcome-section">
+            <h2>👑 Admin Overview</h2>
+            <p>Manage the entire organization, brands, and users.</p>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>Total Brands</h3>
+              <p class="stat-number">3</p>
+            </div>
+            <div class="stat-card">
+              <h3>Total Branches</h3>
+              <p class="stat-number">8</p>
+            </div>
+            <div class="stat-card">
+              <h3>Total Users</h3>
+              <p class="stat-number">150</p>
+            </div>
+            <div class="stat-card">
+              <h3>Active Schedules</h3>
+              <p class="stat-number">12</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- MANAGER SECTION (Admin + Manager)            -->
+        <!-- ============================================ -->
+        <section class="role-section manager-only">
+          <div class="welcome-section">
+            <h2>📊 Manager Overview</h2>
+            <p>Manage your branch operations and team.</p>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>Team Members</h3>
+              <p class="stat-number">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>Today's Staff</h3>
+              <p class="stat-number">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>Coverage</h3>
+              <p class="stat-number">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>Conflicts</h3>
+              <p class="stat-number">0</p>
+            </div>
+          </div>
+          <button class="btn-primary">📅 Generate Schedule</button>
+          <!-- ============================================ -->
+          <!-- CREW MANAGEMENT (Manager Only)               -->
+          <!-- ============================================ -->
+          <section class="role-section manager-only">
+            <div class="welcome-section">
+              <h2>👥 Crew Management</h2>
+              <p>Add and manage your crew members.</p>
+            </div>
+
+            <!-- FORM: Add New Crew -->
+            <div
+              style="
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+              "
+            >
+              <h3>➕ Add New Crew Member</h3>
+              <form id="crewForm">
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 15px;
+                    margin-bottom: 15px;
+                  "
+                >
+                  <div>
+                    <label
+                      style="
+                        display: block;
+                        margin-bottom: 5px;
+                        font-weight: bold;
+                      "
+                      >Full Name</label
+                    >
+                    <input
+                      type="text"
+                      id="crew_name"
+                      required
+                      placeholder="e.g., Juan Dela Cruz"
+                      style="
+                        width: 100%;
+                        padding: 8px;
+                        border: 1px solid #ccc;
+                        border-radius: 5px;
+                        box-sizing: border-box;
+                      "
+                    />
+                  </div>
+                  <div>
+                    <label
+                      style="
+                        display: block;
+                        margin-bottom: 5px;
+                        font-weight: bold;
+                      "
+                      >Email</label
+                    >
+                    <input
+                      type="email"
+                      id="crew_email"
+                      required
+                      placeholder="e.g., juan@example.com"
+                      style="
+                        width: 100%;
+                        padding: 8px;
+                        border: 1px solid #ccc;
+                        border-radius: 5px;
+                        box-sizing: border-box;
+                      "
+                    />
+                  </div>
+                </div>
+
+                <div style="margin-bottom: 15px">
+                  <label
+                    style="
+                      display: block;
+                      margin-bottom: 5px;
+                      font-weight: bold;
+                    "
+                    >Employment Type</label
+                  >
+                  <select
+                    id="employment_type"
+                    required
+                    style="
+                      width: 100%;
+                      padding: 8px;
+                      border: 1px solid #ccc;
+                      border-radius: 5px;
+                    "
+                  >
+                    <option value="">-- Select --</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                  </select>
+                </div>
+
+                <div style="margin-bottom: 15px">
+                  <label
+                    style="
+                      display: block;
+                      margin-bottom: 5px;
+                      font-weight: bold;
+                    "
+                    >Crew Type (Pwedeng pumili ng higit sa isa)</label
+                  >
+                  <div
+                    style="
+                      display: flex;
+                      flex-wrap: wrap;
+                      gap: 15px;
+                      margin-top: 5px;
+                    "
+                  >
+                    <label style="cursor: pointer"
+                      ><input
+                        type="checkbox"
+                        class="crew-type-cb"
+                        value="Production crew"
+                      />
+                      Production crew</label
+                    >
+                    <label style="cursor: pointer"
+                      ><input
+                        type="checkbox"
+                        class="crew-type-cb"
+                        value="Service crew"
+                      />
+                      Service crew</label
+                    >
+                    <label style="cursor: pointer"
+                      ><input
+                        type="checkbox"
+                        class="crew-type-cb"
+                        value="Gel crew"
+                      />
+                      Gel crew</label
+                    >
+                    <label style="cursor: pointer"
+                      ><input
+                        type="checkbox"
+                        class="crew-type-cb"
+                        value="Crew Trainer"
+                      />
+                      Crew Trainer</label
+                    >
+                    <label style="cursor: pointer"
+                      ><input
+                        type="checkbox"
+                        class="crew-type-cb"
+                        value="Maintenance crew"
+                      />
+                      Maintenance crew</label
+                    >
+                  </div>
+                </div>
+
+                <button type="submit" class="btn-primary">Add Crew</button>
+              </form>
+            </div>
+
+            <!-- LIST: Crew Members -->
+            <div id="crew-list">
+              <p>Loading crew...</p>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- SCHEDULES CREATED BY MANAGERS (Admin Only)   -->
+        <!-- ============================================ -->
+        <div class="role-section admin-only" id="manager-schedules-section">
+          <h2>📋 Schedules Created by Managers</h2>
+          <p>Manage and review the schedules generated by your managers.</p>
+          <div id="schedules-container">
+            <p>Loading schedules...</p>
+          </div>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- EMPLOYEE SECTION (Employee lang ito dapat)   -->
+        <!-- ============================================ -->
+        <section class="role-section employee-only">
+          <div class="welcome-section">
+            <h2>🕐 My Schedule</h2>
+            <p>Your upcoming shifts and availability.</p>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>Next Shift</h3>
+              <p class="stat-number">Monday, 8:00 AM</p>
+              <p>Station: Cashier</p>
+            </div>
+            <div class="stat-card">
+              <h3>Weekly Hours</h3>
+              <p class="stat-number">32 / 32 hours</p>
+              <p>On track ✅</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="../assets/js/dashboard.js"></script>
+
+    <!-- ============================================ -->
+    <!-- MODAL: Generate Schedule                     -->
+    <!-- ============================================ -->
+    <div id="scheduleModal" class="modal" style="display: none">
+      <div class="modal-content">
+        <h2>📅 Generate Schedule</h2>
+        <form id="scheduleForm">
+          <label>Branch Name</label>
+          <input
+            type="text"
+            id="branch_name"
+            required
+            placeholder="e.g., Main Branch"
+          />
+
+          <label>Schedule Date</label>
+          <input type="date" id="schedule_date" required />
+
+          <label>Shift Start</label>
+          <input type="time" id="shift_start" required />
+
+          <label>Shift End</label>
+          <input type="time" id="shift_end" required />
+
+          <div class="modal-actions">
+            <button type="submit" class="btn-primary">Create</button>
+            <button
+              type="button"
+              class="btn-secondary"
+              onclick="closeScheduleModal()"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <button
+      class="btn-primary manager-action-only"
+      onclick="openScheduleModal()"
+    >
+      📅 Generate Schedule
+    </button>
+  </body>
+</html>

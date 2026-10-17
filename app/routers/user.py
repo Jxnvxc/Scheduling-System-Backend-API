@@ -4,6 +4,9 @@ from app.database import get_db
 from app.schemas.user import UserCreate, UserResponse, UserLogin
 from app.services import user_service
 from app.auth.jwt_handler import create_access_token
+from app.auth.hashing import hash_password, verify_password
+from app.auth.dependencies import get_current_user
+from app.models.user import User
 
 router = APIRouter(
     prefix="/auth",
@@ -44,3 +47,29 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
             "role": authenticated_user.role.value
         }
     }
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePassword,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # I-verify ang lumang password
+    if not verify_password(payload.old_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Old password is incorrect"
+        )
+    
+    # I-validate ang bagong password
+    if len(payload.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 6 characters"
+        )
+    
+    # I-update ang password
+    current_user.password_hash = hash_password(payload.new_password)
+    db.commit()
+    
+    return {"message": "Password changed successfully!"}

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Register</title>
+    <link rel="stylesheet" href="../assets/css/style.css">
+  </head>
+  <body>
+    <div class="container">
+      <div class="form-box">
+        <h1>Don't have a account?</h1>
+        <h2>Register</h2>
+
+        <form id="registerForm">
+          <div class="input-group">
+            <label for="full_name">Full Name</label>
+            <input
+              type="text"
+              id="full_name"
+              placeholder="Janvic Diamante"
+              required
+            />
+          </div>
+          <div class="input-group">
+            <label for="email">Email</label>
+            <input
+              type="email"
+              id="email"
+              placeholder="janvic@example.com"
+              required
+            />
+          </div>
+          <div class="input-group">
+            <label for="password">Password</label>
+            <input
+              type="password"
+              id="password"
+              placeholder="••••••••"
+              minlength="8"
+              required
+            />
+          </div>
+          <div class="input-group">
+            <label for="role">Role</label>
+            <select id="role" required>
+              <option value="employee">Employee</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-primary">Register</button>
+        </form>
+
+        <p class="link">
+          May account na? <a href="index.html">Mag-login dito</a>
+        </p>
+        <div id="message" class="message"></div>
+      </div>
+    </div>
+
+    <script src="../assets/js/auth.js"></script>
+</html>

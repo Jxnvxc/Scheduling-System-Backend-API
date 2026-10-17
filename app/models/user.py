@@ -13,9 +13,14 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)  # <-- Ginawang nullable
     full_name = Column(String, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.EMPLOYEE, nullable=False)
+    
+    # BAGONG COLUMNS PARA SA CREW
+    crew_type = Column(String, nullable=True)          # e.g., "Gel crew, Crew Trainer"
+    employment_type = Column(String, nullable=True)    # "Full-time" o "Part-time"
+    
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

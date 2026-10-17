@@ -3,7 +3,7 @@ from typing import Optional
 from datetime import datetime
 from sqlalchemy import true
 from app.models.user import UserRole
-
+  
 
 class UserBase(BaseModel):
   email: EmailStr
@@ -26,6 +26,10 @@ class UserResponse(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+class ChangePassword(BaseModel):
+    old_password: str
+    new_password: str
 
 
 
