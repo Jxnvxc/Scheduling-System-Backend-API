@@ -4,6 +4,7 @@ from app.database import engine, Base
 from app.routers import user, schedule  # Import both
 from app.routers import user, schedule, stats
 from app.routers import user, schedule, stats, crew 
+from app.routers import user, schedule, stats, crew, availability, branch, station
 
 app = FastAPI(
     title="Scheduling API",
@@ -25,6 +26,9 @@ app.include_router(user.router)
 app.include_router(schedule.router)  # ← ITO ANG KULANG!
 app.include_router(stats.router)
 app.include_router(crew.router)
+app.include_router(availability.router)
+app.include_router(branch.router)
+app.include_router(station.router)
 # Siguraduhing naka-create ang lahat ng tables sa database
 Base.metadata.create_all(bind=engine)
 

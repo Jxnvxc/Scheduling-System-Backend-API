@@ -2,18 +2,27 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional
 
-# Para sa pag-create ng crew
 class CrewCreate(BaseModel):
     full_name: str
     email: EmailStr
-    crew_type: str          # e.g., "Gel crew, Crew Trainer"
-    employment_type: str    # "Full-time" o "Part-time"
-# Para sa response (hindi kasama ang password)
+    employment_type: str
+    crew_type: str
+    branch_id: Optional[int] = None
+    min_hours: Optional[int] = 0
+    max_hours: Optional[int] = 40
+    qualified_stations: Optional[str] = None
+
 class CrewResponse(BaseModel):
     id: int
     full_name: str
     email: str
     role: str
+    crew_type: Optional[str] = None
+    employment_type: Optional[str] = None
+    branch_id: Optional[int] = None
+    min_hours: Optional[int] = 0   # <-- Ginawang Optional
+    max_hours: Optional[int] = 40  # <-- Ginawang Optional
+    qualified_stations: Optional[str] = None
     is_active: bool
     created_at: datetime
 

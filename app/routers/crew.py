@@ -30,6 +30,10 @@ def get_all_crew(
             "role": c.role.value,
             "crew_type": c.crew_type,
             "employment_type": c.employment_type,
+            "branch_id": c.branch_id,                                 # <-- Idagdag
+            "min_hours": c.min_hours if c.min_hours is not None else 0, # <-- Idagdag (may default kung NULL)
+            "max_hours": c.max_hours if c.max_hours is not None else 40,# <-- Idagdag (may default kung NULL)
+            "qualified_stations": c.qualified_stations,               # <-- Idagdag
             "is_active": c.is_active,
             "created_at": c.created_at
         }
@@ -50,13 +54,17 @@ def create_crew(
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     new_crew = User(
-       email=crew.email,
-       password_hash=hash_password(DEFAULT_PASSWORD),  # ← BAGO
-       full_name=crew.full_name,
-       role=UserRole.EMPLOYEE,
-       crew_type=crew.crew_type,
-       employment_type=crew.employment_type
-)
+        email=crew.email,
+        password_hash=hash_password(DEFAULT_PASSWORD),
+        full_name=crew.full_name,
+        role=UserRole.EMPLOYEE,
+        crew_type=crew.crew_type,
+        employment_type=crew.employment_type,
+        branch_id=crew.branch_id,                   # BAGO
+        min_hours=crew.min_hours,                   # BAGO
+        max_hours=crew.max_hours,                   # BAGO
+        qualified_stations=crew.qualified_stations  # BAGO
+    )
     
     db.add(new_crew)
     db.commit()
@@ -69,6 +77,10 @@ def create_crew(
         "role": new_crew.role.value,
         "crew_type": new_crew.crew_type,
         "employment_type": new_crew.employment_type,
+        "branch_id": new_crew.branch_id,
+        "min_hours": new_crew.min_hours if new_crew.min_hours is not None else 0,
+        "max_hours": new_crew.max_hours if new_crew.max_hours is not None else 40,
+        "qualified_stations": new_crew.qualified_stations,
         "is_active": new_crew.is_active,
         "created_at": new_crew.created_at
     }

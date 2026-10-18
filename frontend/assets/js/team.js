@@ -1,11 +1,4 @@
-// ========================================
-// CONFIG
-// ========================================
 const API_URL = "http://127.0.0.1:8000";
-
-// ========================================
-// AUTH GUARD
-// ========================================
 const token = localStorage.getItem("access_token");
 const userString = localStorage.getItem("user");
 
@@ -21,21 +14,15 @@ try {
     window.location.href = "../index.html";
 }
 
-// Display user info
 if (user) {
     const userNameEl = document.getElementById("userName");
     const userRoleEl = document.getElementById("userRole");
     const topBarNameEl = document.getElementById("topBarName");
     if (userNameEl) userNameEl.textContent = user.full_name || "User";
-    if (userRoleEl) userRoleEl.textContent = user.role
-        ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
-        : "User";
+    if (userRoleEl) userRoleEl.textContent = user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : "User";
     if (topBarNameEl) topBarNameEl.textContent = user.full_name || "User";
 }
 
-// ========================================
-// MGA POSISYON / SKILLS
-// ========================================
 const CREW_POSITIONS = [
     { key: "Production crew",    icon: "🏭", color: "#3498db" },
     { key: "Service crew",       icon: "🍽️", color: "#e67e22" },
@@ -44,9 +31,6 @@ const CREW_POSITIONS = [
     { key: "Maintenance crew",   icon: "🔧", color: "#95a5a6" }
 ];
 
-// ========================================
-// FETCH AT I-GROUP ANG CREW
-// ========================================
 async function fetchGroupedCrew() {
     const container = document.getElementById("grouped-crew-container");
     if (!container) return;
@@ -65,31 +49,30 @@ async function fetchGroupedCrew() {
             return;
         }
 
-        // I-group ang crew base sa kanilang crew_type
         const groups = {};
         CREW_POSITIONS.forEach(pos => groups[pos.key] = []);
-        groups["Unassigned"] = []; // Para sa mga walang crew type
+        groups["Unassigned"] = [];
 
         crew.forEach(c => {
+            // Kinukuha ang crew_type (e.g., "Gel crew, Crew Trainer")
             const types = (c.crew_type || "Unassigned").split(",").map(t => t.trim());
             let assigned = false;
+            
             types.forEach(type => {
                 if (groups[type]) {
                     groups[type].push(c);
                     assigned = true;
                 }
             });
+            
             if (!assigned) groups["Unassigned"].push(c);
         });
 
-        // I-render ang bawat group
         let html = "";
         CREW_POSITIONS.forEach(pos => {
-            const members = groups[pos.key];
-            html += renderGroup(pos.icon, pos.key, pos.color, members);
+            html += renderGroup(pos.icon, pos.key, pos.color, groups[pos.key]);
         });
 
-        // Idagdag ang "Unassigned" kung may laman
         if (groups["Unassigned"].length > 0) {
             html += renderGroup("❓", "Unassigned", "#7f8c8d", groups["Unassigned"]);
         }
@@ -101,12 +84,8 @@ async function fetchGroupedCrew() {
     }
 }
 
-// ========================================
-// RENDER FUNCTION PARA SA BAWAT GROUP
-// ========================================
 function renderGroup(icon, title, color, members) {
     if (members.length === 0) {
-        // Magpakita pa rin ng section kahit walang member
         return `
             <div style="background:white; padding:20px; border-radius:10px; margin-bottom:20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-left: 5px solid ${color};">
                 <h3 style="margin: 0 0 10px 0; color:${color};">${icon} ${title} <span style="font-size:14px; color:#888;">(0)</span></h3>
@@ -139,16 +118,12 @@ function renderGroup(icon, title, color, members) {
     `;
 }
 
-// ========================================
-// LOGOUT
-// ========================================
 function logout() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("user");
-    window.location.href = "../index.html";
+    // Siguraduhing tama ang path pabalik sa login page
+    window.location.href = "index.html"; 
 }
 
-// ========================================
-// INIT
-// ========================================
+// Patakbuhin pagka-load ng page
 fetchGroupedCrew();

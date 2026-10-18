@@ -4,43 +4,203 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SmartShift - Login</title>
-    <link rel="stylesheet" href="../assets/css/style.css" />
+    <!-- Kung may external css ka, pwede mong i-keep ito, pero eto muna ang masusunod -->
+    <style>
+      :root {
+        --bg-main: #f4f8fa;
+        --primary: #0a7075;
+        --accent: #0c969c;
+        --text-main: #031716;
+        --text-muted: #274d60;
+        --border-color: #6ba3be;
+      }
+
+      body {
+        font-family: "Inter", "Segoe UI", sans-serif;
+        background: linear-gradient(135deg, #f4f8fa 0%, #e8f1f2 100%);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        color: var(--text-main);
+      }
+
+      .login-container {
+        background-color: #ffffff;
+        padding: 40px;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(12, 150, 156, 0.15);
+        width: 100%;
+        max-width: 400px;
+
+        /* ITO YUNG BORDER NA GUSTO MO */
+        border: 2px solid var(--accent);
+
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* Dagdag na design: Makapal na linya sa tuktok ng box */
+      .login-container::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 6px;
+        background-color: var(--primary);
+      }
+
+      .login-container h1 {
+        margin-top: 10px;
+        margin-bottom: 5px;
+        font-size: 26px;
+        color: var(--primary);
+        font-weight: 800;
+      }
+
+      .login-container h2 {
+        color: var(--text-muted);
+        margin-bottom: 30px;
+        font-weight: 500;
+        font-size: 16px;
+      }
+
+      .form-group {
+        text-align: left;
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        color: var(--text-muted);
+        font-size: 13px;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: 700;
+      }
+
+      input {
+        width: 100%;
+        padding: 12px 15px;
+        background-color: var(--bg-main);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        color: var(--text-main);
+        font-size: 14px;
+        box-sizing: border-box;
+        transition: 0.3s;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: var(--accent);
+        background-color: #ffffff;
+        box-shadow: 0 0 0 3px rgba(12, 150, 156, 0.15);
+      }
+
+      button {
+        width: 100%;
+        padding: 14px;
+        background-color: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: 0.3s;
+        margin-top: 10px;
+      }
+
+      button:hover {
+        background-color: var(--primary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(10, 112, 117, 0.3);
+      }
+
+      .register-link {
+        margin-top: 20px;
+        font-size: 14px;
+        color: var(--text-muted);
+      }
+
+      .register-link a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .register-link a:hover {
+        text-decoration: underline;
+      }
+
+      /* Inayos ko yung message box para lumabas nang tama */
+      .message {
+        margin-top: 15px;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 14px;
+        display: none; /* Nakatago by default */
+      }
+
+      /* Kapag may success class, magiging berde */
+      .message.success {
+        display: block;
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      /* Kapag may error class, magiging pula */
+      .message.error {
+        display: block;
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+    </style>
   </head>
   <body>
-    <div class="container">
-      <div class="form-box">
-        <h1>Scheduling System</h1>
-        <h2>Login</h2>
+    <!-- Inayos ko ang class mula "container" papuntang "login-container" -->
+    <div class="login-container">
+      <h1>SmartShift</h1>
+      <h2>Scheduling System</h2>
 
-        <form id="loginForm">
-          <div class="input-group">
-            <label for="email">Email</label>
-            <input
-              type="email"
-              id="email"
-              placeholder="janvic@example.com"
-              required
-            />
-          </div>
-          <div class="input-group">
-            <label for="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          <button type="submit" class="btn-primary">Login</button>
-        </form>
+      <form id="loginForm">
+        <!-- Inayos ko yung "input-group" papuntang "form-group" -->
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input
+            type="email"
+            id="email"
+            placeholder="Enter your email"
+            required
+          />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            placeholder="••••••••"
+            required
+          />
+        </div>
+        <button type="submit">Login</button>
+      </form>
 
-        <p class="link">
-          Wala pang account? <a href="register.html">Mag-register dito</a>
-        </p>
-        <div id="message" class="message"></div>
+      <div id="message" class="message"></div>
+
+      <!-- Inayos ko yung "link" class papuntang "register-link" -->
+      <div class="register-link">
+        Wala pang account? <a href="register.html">Mag-register dito</a>
       </div>
     </div>
 
-   <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/auth.js"></script>
   </body>
 </html>

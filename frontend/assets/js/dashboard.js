@@ -368,12 +368,77 @@ if (user && (user.role === "manager" || user.role === "admin")) {
     fetchCrew();
 }
 // ========================================
+// 10. FETCH BRANCHES AND STATIONS FOR CREW FORM
+// ========================================
+async function loadFormData() {
+    const branchSelect = document.getElementById("branch_id_select");
+    const stationsContainer = document.getElementById("stations-checkboxes");
+    
+    if (!branchSelect || !stationsContainer) return; // Kung wala ang form, skip
+
+    try {
+        // 1. Fetch Branches
+        const branchRes = await fetch(`${API_URL}/branches/`, { headers: { "Authorization": `Bearer ${token}` }});
+        const branches = await branchRes.json();
+        
+        branchSelect.innerHTML = '<option value="">-- Select Branch --</option>';
+        branches.forEach(b => {
+            branchSelect.innerHTML += `<option value="${b.id}">${b.name}</option>`;
+        });
+
+        // 2. Fetch Stations
+        const stationRes = await fetch(`${API_URL}/stations/`, { headers: { "Authorization": `Bearer ${token}` }});
+        const stations = await stationRes.json();
+        
+        stationsContainer.innerHTML = "";
+        if(stations.length === 0) {
+            stationsContainer.innerHTML = "<small style='color:red;'>No stations found. Please add stations first.</small>";
+        }
+        
+        stations.forEach(s => {
+            stationsContainer.innerHTML += `
+                <label style="cursor: pointer; font-size: 14px;">
+                    <input type="checkbox" class="station-cb" value="${s.id}"> ${s.name}
+                </label>
+            `;
+        });
+
+    } catch (error) {
+        console.error("Error loading form data:", error);
+    }
+}
+
+// I-update ang crewForm submit listener para isama ang bagong fields
+// Hanapin ang crewForm.addEventListener("submit", ...) at palitan ang payload:
+
+    const selectedStations = Array.from(document.querySelectorAll('.station-cb:checked'))
+                                .map(cb => cb.value)
+                                .join(',');
+
+    const payload = {
+        full_name: document.getElementById("crew_name").value,
+        email: document.getElementById("crew_email").value,
+        employment_type: document.getElementById("employment_type").value,
+        crew_type: selectedTypes || "Unassigned",
+        branch_id: document.getElementById("branch_id_select").value ? parseInt(document.getElementById("branch_id_select").value) : null,
+        min_hours: parseInt(document.getElementById("min_hours").value),
+        max_hours: parseInt(document.getElementById("max_hours").value),
+        qualified_stations: selectedStations || null
+    };
+
+
+// Tawagin ang loadFormData kapag nag-load ang page
+if (user && user.role === "manager") {
+    loadFormData();
+}
+// ========================================
 // 6. LOGOUT FUNCTION
 // ========================================
 function logout() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("user");
-    window.location.href = "index.html";
+    // Siguraduhing tama ang path pabalik sa login page
+    window.location.href = "index.html"; 
 }
 
 // ========================================

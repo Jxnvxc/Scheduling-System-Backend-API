@@ -20,14 +20,17 @@
           <a href="#" class="nav-link admin-only">🏢 Manage Brands</a>
 
           <!-- ADMIN + MANAGER -->
-          <a href="#" class="nav-link manager-only">📊 Overview</a>
-          <a href="#" class="nav-link manager-only">🏬 Branches</a>
+          <a href="dashboard.html" class="nav-link manager-only">📊 Overview</a>
+          <a href="branches.html" class="nav-link manager-only">🏬 Branches</a>
+          <a href="stations.html" class="nav-link manager-only">🍳 Stations</a>
           <a href="team.html" class="nav-link manager-only">👥 Team</a>
           <a href="#" class="nav-link manager-only">📅 Schedules</a>
 
           <!-- LAHAT (Employee included) -->
           <a href="#" class="nav-link employee-only">🕒 My Schedule</a>
-          <a href="#" class="nav-link employee-only">✅ My Availability</a>
+          <a href="my-availability.html" class="nav-link employee-only"
+            >✅ My Availability</a
+          >
           <a href="#" class="nav-link employee-only">🔄 Request Swap</a>
           <a href="change-password.html" class="nav-link">🔒 Change Password</a>
         </nav>
@@ -87,112 +90,228 @@
             <p>Manage your branch operations and team.</p>
           </div>
           <div class="stats-grid">
+            <!-- Nilagyan natin ng ID ang mga numbers para ma-update ng JS -->
             <div class="stat-card">
               <h3>Team Members</h3>
-              <p class="stat-number">0</p>
+              <p class="stat-number" id="teamMembersCount">0</p>
             </div>
             <div class="stat-card">
               <h3>Today's Staff</h3>
-              <p class="stat-number">0</p>
+              <p class="stat-number" id="todaysStaffCount">0</p>
             </div>
             <div class="stat-card">
               <h3>Coverage</h3>
-              <p class="stat-number">0</p>
+              <p class="stat-number" id="coveragePercent">0%</p>
             </div>
             <div class="stat-card">
               <h3>Conflicts</h3>
-              <p class="stat-number">0</p>
+              <p class="stat-number" id="conflictsCount">0</p>
             </div>
           </div>
-          <button class="btn-primary">📅 Generate Schedule</button>
-          <!-- ============================================ -->
-          <!-- CREW MANAGEMENT (Manager Only)               -->
-          <!-- ============================================ -->
-          <section class="role-section manager-only">
-            <div class="welcome-section">
-              <h2>👥 Crew Management</h2>
-              <p>Add and manage your crew members.</p>
-            </div>
 
-            <!-- FORM: Add New Crew -->
-            <div
-              style="
-                background: white;
-                padding: 20px;
-                border-radius: 10px;
-                margin-bottom: 20px;
-                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-              "
-            >
-              <h3>➕ Add New Crew Member</h3>
-              <form id="crewForm">
-                <div
-                  style="
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 15px;
-                    margin-bottom: 15px;
-                  "
-                >
-                  <div>
-                    <label
-                      style="
-                        display: block;
-                        margin-bottom: 5px;
-                        font-weight: bold;
-                      "
-                      >Full Name</label
-                    >
-                    <input
-                      type="text"
-                      id="crew_name"
-                      required
-                      placeholder="e.g., Juan Dela Cruz"
-                      style="
-                        width: 100%;
-                        padding: 8px;
-                        border: 1px solid #ccc;
-                        border-radius: 5px;
-                        box-sizing: border-box;
-                      "
-                    />
-                  </div>
-                  <div>
-                    <label
-                      style="
-                        display: block;
-                        margin-bottom: 5px;
-                        font-weight: bold;
-                      "
-                      >Email</label
-                    >
-                    <input
-                      type="email"
-                      id="crew_email"
-                      required
-                      placeholder="e.g., juan@example.com"
-                      style="
-                        width: 100%;
-                        padding: 8px;
-                        border: 1px solid #ccc;
-                        border-radius: 5px;
-                        box-sizing: border-box;
-                      "
-                    />
-                  </div>
-                </div>
+          <!-- Inayos ang button para pumasok sa tamang class at onclick -->
+          <button
+            class="btn-primary manager-action-only"
+            onclick="openScheduleModal()"
+          >
+            📅 Generate Schedule
+          </button>
+        </section>
 
-                <div style="margin-bottom: 15px">
+        <!-- ============================================ -->
+        <!-- CREW MANAGEMENT (Manager Only)               -->
+        <!-- ============================================ -->
+        <section class="role-section manager-only">
+          <div class="welcome-section">
+            <h2>👥 Crew Management</h2>
+            <p>Add and manage your crew members.</p>
+          </div>
+
+          <!-- FORM: Add New Crew -->
+          <div
+            style="
+              background: white;
+              padding: 20px;
+              border-radius: 10px;
+              margin-bottom: 20px;
+              box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            "
+          >
+            <h3>➕ Add New Crew Member</h3>
+            <form id="crewForm">
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: 1fr 1fr;
+                  gap: 15px;
+                  margin-bottom: 15px;
+                "
+              >
+                <div>
                   <label
                     style="
                       display: block;
                       margin-bottom: 5px;
                       font-weight: bold;
                     "
-                    >Employment Type</label
+                    >Full Name</label
                   >
-                  <select
-                    id="employment_type"
+                  <input
+                    type="text"
+                    id="crew_name"
+                    required
+                    placeholder="e.g., Juan Dela Cruz"
+                    style="
+                      width: 100%;
+                      padding: 8px;
+                      border: 1px solid #ccc;
+                      border-radius: 5px;
+                      box-sizing: border-box;
+                    "
+                  />
+                </div>
+                <div>
+                  <label
+                    style="
+                      display: block;
+                      margin-bottom: 5px;
+                      font-weight: bold;
+                    "
+                    >Email</label
+                  >
+                  <input
+                    type="email"
+                    id="crew_email"
+                    required
+                    placeholder="e.g., juan@example.com"
+                    style="
+                      width: 100%;
+                      padding: 8px;
+                      border: 1px solid #ccc;
+                      border-radius: 5px;
+                      box-sizing: border-box;
+                    "
+                  />
+                </div>
+              </div>
+
+              <div style="margin-bottom: 15px">
+                <label
+                  style="display: block; margin-bottom: 5px; font-weight: bold"
+                  >Employment Type</label
+                >
+                <select
+                  id="employment_type"
+                  required
+                  style="
+                    width: 100%;
+                    padding: 8px;
+                    border: 1px solid #ccc;
+                    border-radius: 5px;
+                  "
+                >
+                  <option value="">-- Select --</option>
+                  <option value="Full-time">Full-time</option>
+                  <option value="Part-time">Part-time</option>
+                </select>
+              </div>
+
+              <div style="margin-bottom: 15px">
+                <label
+                  style="display: block; margin-bottom: 5px; font-weight: bold"
+                  >Crew Type (Pwedeng pumili ng higit sa isa)</label
+                >
+                <div
+                  style="
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 15px;
+                    margin-top: 5px;
+                  "
+                >
+                  <label style="cursor: pointer"
+                    ><input
+                      type="checkbox"
+                      class="crew-type-cb"
+                      value="Production crew"
+                    />
+                    Production crew</label
+                  >
+                  <label style="cursor: pointer"
+                    ><input
+                      type="checkbox"
+                      class="crew-type-cb"
+                      value="Service crew"
+                    />
+                    Service crew</label
+                  >
+                  <label style="cursor: pointer"
+                    ><input
+                      type="checkbox"
+                      class="crew-type-cb"
+                      value="Gel crew"
+                    />
+                    Gel crew</label
+                  >
+                  <label style="cursor: pointer"
+                    ><input
+                      type="checkbox"
+                      class="crew-type-cb"
+                      value="Crew Trainer"
+                    />
+                    Crew Trainer</label
+                  >
+                  <label style="cursor: pointer"
+                    ><input
+                      type="checkbox"
+                      class="crew-type-cb"
+                      value="Maintenance crew"
+                    />
+                    Maintenance crew</label
+                  >
+                </div>
+              </div>
+              <!-- IDAGDAG ITO SA ILALIM NG EMPLOYMENT TYPE -->
+              <div style="margin-bottom: 15px">
+                <label
+                  style="display: block; margin-bottom: 5px; font-weight: bold"
+                  >Assigned Branch</label
+                >
+                <select
+                  id="branch_id_select"
+                  required
+                  style="
+                    width: 100%;
+                    padding: 8px;
+                    border: 1px solid #ccc;
+                    border-radius: 5px;
+                  "
+                >
+                  <option value="">-- Loading branches... --</option>
+                </select>
+              </div>
+
+              <div
+                style="
+                  display: grid;
+                  grid-template-columns: 1fr 1fr;
+                  gap: 15px;
+                  margin-bottom: 15px;
+                "
+              >
+                <div>
+                  <label
+                    style="
+                      display: block;
+                      margin-bottom: 5px;
+                      font-weight: bold;
+                    "
+                    >Min Hours / Week</label
+                  >
+                  <input
+                    type="number"
+                    id="min_hours"
+                    value="0"
                     required
                     style="
                       width: 100%;
@@ -200,82 +319,58 @@
                       border: 1px solid #ccc;
                       border-radius: 5px;
                     "
-                  >
-                    <option value="">-- Select --</option>
-                    <option value="Full-time">Full-time</option>
-                    <option value="Part-time">Part-time</option>
-                  </select>
+                  />
                 </div>
-
-                <div style="margin-bottom: 15px">
+                <div>
                   <label
                     style="
                       display: block;
                       margin-bottom: 5px;
                       font-weight: bold;
                     "
-                    >Crew Type (Pwedeng pumili ng higit sa isa)</label
+                    >Max Hours / Week</label
                   >
-                  <div
+                  <input
+                    type="number"
+                    id="max_hours"
+                    value="40"
+                    required
                     style="
-                      display: flex;
-                      flex-wrap: wrap;
-                      gap: 15px;
-                      margin-top: 5px;
+                      width: 100%;
+                      padding: 8px;
+                      border: 1px solid #ccc;
+                      border-radius: 5px;
                     "
-                  >
-                    <label style="cursor: pointer"
-                      ><input
-                        type="checkbox"
-                        class="crew-type-cb"
-                        value="Production crew"
-                      />
-                      Production crew</label
-                    >
-                    <label style="cursor: pointer"
-                      ><input
-                        type="checkbox"
-                        class="crew-type-cb"
-                        value="Service crew"
-                      />
-                      Service crew</label
-                    >
-                    <label style="cursor: pointer"
-                      ><input
-                        type="checkbox"
-                        class="crew-type-cb"
-                        value="Gel crew"
-                      />
-                      Gel crew</label
-                    >
-                    <label style="cursor: pointer"
-                      ><input
-                        type="checkbox"
-                        class="crew-type-cb"
-                        value="Crew Trainer"
-                      />
-                      Crew Trainer</label
-                    >
-                    <label style="cursor: pointer"
-                      ><input
-                        type="checkbox"
-                        class="crew-type-cb"
-                        value="Maintenance crew"
-                      />
-                      Maintenance crew</label
-                    >
-                  </div>
+                  />
                 </div>
+              </div>
 
-                <button type="submit" class="btn-primary">Add Crew</button>
-              </form>
-            </div>
+              <div style="margin-bottom: 15px">
+                <label
+                  style="display: block; margin-bottom: 5px; font-weight: bold"
+                  >Qualified Stations</label
+                >
+                <div
+                  id="stations-checkboxes"
+                  style="
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 15px;
+                    margin-top: 5px;
+                  "
+                >
+                  <!-- Dito ipapasok ng JS ang mga station checkboxes -->
+                  <small style="color: #666">Loading stations...</small>
+                </div>
+              </div>
+              <button type="submit" class="btn-primary">Add Crew</button>
+            </form>
+          </div>
 
-            <!-- LIST: Crew Members -->
-            <div id="crew-list">
-              <p>Loading crew...</p>
-            </div>
-          </section>
+          <!-- LIST: Crew Members -->
+          <div id="crew-list">
+            <p>Loading crew...</p>
+          </div>
         </section>
 
         <!-- ============================================ -->
@@ -314,8 +409,6 @@
       </main>
     </div>
 
-    <script src="../assets/js/dashboard.js"></script>
-
     <!-- ============================================ -->
     <!-- MODAL: Generate Schedule                     -->
     <!-- ============================================ -->
@@ -353,11 +446,7 @@
         </form>
       </div>
     </div>
-    <button
-      class="btn-primary manager-action-only"
-      onclick="openScheduleModal()"
-    >
-      📅 Generate Schedule
-    </button>
+
+    <script src="../assets/js/dashboard.js"></script>
   </body>
 </html>
