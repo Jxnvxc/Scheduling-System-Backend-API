@@ -20,7 +20,14 @@ def get_all_crew(
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail="Only managers and admins can view crew")
     
-    crew = db.query(User).filter(User.role == UserRole.EMPLOYEE).all()
+    # I-SECURITY CHECK: Data Isolation
+    query = db.query(User).filter(User.role == UserRole.EMPLOYEE)
+    
+    if current_user.role == UserRole.MANAGER:
+        # Kita lang ni Manager yung crew sa branch niya
+        query = query.filter(User.branch_id == current_user.branch_id)
+
+    crew = query.all()
     
     return [
         {
@@ -30,10 +37,10 @@ def get_all_crew(
             "role": c.role.value,
             "crew_type": c.crew_type,
             "employment_type": c.employment_type,
-            "branch_id": c.branch_id,                                 # <-- Idagdag
-            "min_hours": c.min_hours if c.min_hours is not None else 0, # <-- Idagdag (may default kung NULL)
-            "max_hours": c.max_hours if c.max_hours is not None else 40,# <-- Idagdag (may default kung NULL)
-            "qualified_stations": c.qualified_stations,               # <-- Idagdag
+            "branch_id": c.branch_id,
+            "min_hours": c.min_hours if c.min_hours is not None else 0,
+            "max_hours": c.max_hours if c.max_hours is not None else 40,
+            "qualified_stations": c.qualified_stations,
             "is_active": c.is_active,
             "created_at": c.created_at
         }
@@ -50,9 +57,14 @@ def create_crew(
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail="Only managers and admins can create crew")
     
+    # I-SECURITY CHECK: Manager can only create crew for their own branch
+    if current_user.role == UserRole.MANAGER and crew.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="You can only create crew for your assigned branch")
+
     existing = db.query(User).filter(User.email == crew.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+        
     new_crew = User(
         email=crew.email,
         password_hash=hash_password(DEFAULT_PASSWORD),
@@ -60,10 +72,10 @@ def create_crew(
         role=UserRole.EMPLOYEE,
         crew_type=crew.crew_type,
         employment_type=crew.employment_type,
-        branch_id=crew.branch_id,                   # BAGO
-        min_hours=crew.min_hours,                   # BAGO
-        max_hours=crew.max_hours,                   # BAGO
-        qualified_stations=crew.qualified_stations  # BAGO
+        branch_id=crew.branch_id,
+        min_hours=crew.min_hours,
+        max_hours=crew.max_hours,
+        qualified_stations=crew.qualified_stations
     )
     
     db.add(new_crew)
@@ -95,10 +107,14 @@ def delete_crew(
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail="Only managers and admins can delete crew")
     
-    crew = db.query(User).filter(User.id == crew_id, User.role == UserRole.EMPLOYEE).first()
-    if not crew:
+    crew_member = db.query(User).filter(User.id == crew_id, User.role == UserRole.EMPLOYEE).first()
+    if not crew_member:
         raise HTTPException(status_code=404, detail="Crew not found")
+
+    # I-SECURITY CHECK: Manager can only delete crew from their own branch
+    if current_user.role == UserRole.MANAGER and crew_member.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="You can only delete crew from your assigned branch")
     
-    db.delete(crew)
+    db.delete(crew_member)
     db.commit()
     return None

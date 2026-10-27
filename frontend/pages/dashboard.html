@@ -8,20 +8,21 @@
   </head>
   <body>
     <div class="dashboard-container">
-      <!-- SIDEBAR (Kita na lahat ng links ni Admin) -->
+      <!-- SIDEBAR -->
       <aside class="sidebar">
         <div class="logo"><h2>smartshift</h2></div>
         <nav class="nav-menu">
-          <!-- KITA NG LAHAT -->
           <a href="dashboard.html" class="nav-link active">📊 Overview</a>
 
-          <!-- KITA NG ADMIN AT MANAGER -->
-          <a href="branches.html" class="nav-link">🏬 Branches</a>
-          <a href="stations.html" class="nav-link">🍳 Stations</a>
-          <a href="crew-management.html" class="nav-link">👥 Crew Management</a>
-          <a href="#" class="nav-link">📅 Schedules</a>
+          <!-- KITA NG MANAGER AT ADMIN LANG -->
+          <a href="branches.html" class="nav-link manager-only">🏬 Branches</a>
+          <a href="stations.html" class="nav-link manager-only">🍳 Stations</a>
+          <a href="crew-management.html" class="nav-link manager-only"
+            >👥 Crew Management</a
+          >
+          <a href="#" class="nav-link manager-only">📅 Schedules</a>
 
-          <!-- PARA SA EMPLOYEE/CREW LANG (Matatago kay Admin at Manager) -->
+          <!-- KITA NG EMPLOYEE LANG -->
           <a href="#" class="nav-link employee-only">🕒 My Schedule</a>
           <a href="my-availability.html" class="nav-link employee-only"
             >✅ My Availability</a
@@ -49,7 +50,7 @@
           </div>
         </header>
 
-        <!-- ADMIN OVERVIEW (Ito lang ang nakikita ni Admin sa Dashboard) -->
+        <!-- ADMIN OVERVIEW -->
         <section class="role-section admin-only">
           <div class="welcome-section">
             <h2>👑 Admin Overview</h2>
@@ -75,7 +76,7 @@
           </div>
         </section>
 
-        <!-- MANAGER OVERVIEW (Nakikita lang ni Manager dito) -->
+        <!-- MANAGER OVERVIEW -->
         <section class="role-section manager-only">
           <div class="welcome-section">
             <h2>📊 Manager Overview</h2>
@@ -103,8 +104,46 @@
             class="btn-primary manager-action-only"
             onclick="openScheduleModal()"
           >
-            📅 Generate Schedule
+            📅 Auto-Generate Schedule
           </button>
+        </section>
+
+        <!-- MANAGER: STATION ROSTER (Skills Directory) -->
+        <section class="role-section manager-only">
+          <div class="welcome-section" style="margin-top: 30px">
+            <h2>🎯 Station Roster (Skills)</h2>
+            <p>Listahan ng mga crew na qualified sa bawat station.</p>
+          </div>
+
+          <div
+            style="
+              background: white;
+              border-radius: 10px;
+              border: 1px solid #e2e8f0;
+              overflow: hidden;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            "
+          >
+            <table style="width: 100%; border-collapse: collapse; margin: 0">
+              <thead style="background: #f1f5f9">
+                <tr>
+                  <th style="padding: 15px; text-align: left; width: 30%">
+                    Station
+                  </th>
+                  <th style="padding: 15px; text-align: left">
+                    Qualified Crew
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="station-roster-body">
+                <tr>
+                  <td colspan="2" style="padding: 15px; text-align: center">
+                    Loading roster...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <!-- ADMIN REVIEW SCHEDULES -->
@@ -138,33 +177,104 @@
       </main>
     </div>
 
-    <!-- MODAL -->
+    <!-- MODAL: Generate Schedule (FULL DAY AUTOMATION) -->
     <div id="scheduleModal" class="modal" style="display: none">
-      <div class="modal-content">
-        <h2>📅 Generate Schedule</h2>
-        <form id="scheduleForm">
-          <label>Branch Name</label>
-          <input type="text" id="branch_name" required />
-          <label>Schedule Date</label>
-          <input type="date" id="schedule_date" required />
-          <label>Shift Start</label>
-          <input type="time" id="shift_start" required />
-          <label>Shift End</label>
-          <input type="time" id="shift_end" required />
+      <div class="modal-content" style="width: 700px; max-width: 95%">
+        <h2>📅 Auto-Generate Full Day Schedule</h2>
+        <p style="font-size: 13px; color: #666; margin-bottom: 15px">
+          Piliin ang branch at petsa. Awtomatikong hahanapin ng system ang mga
+          available at qualified crew para sa Opening, Mid, at Closing shifts.
+        </p>
+
+        <form id="generateScheduleForm">
+          <div
+            style="
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 15px;
+              margin-bottom: 15px;
+            "
+          >
+            <div>
+              <label>Branch</label>
+              <select id="gen_branch_id" required>
+                <option value="">-- Loading branches... --</option>
+              </select>
+            </div>
+            <div>
+              <label>Schedule Date</label>
+              <input type="date" id="gen_date" required />
+            </div>
+          </div>
+
           <div
             class="modal-actions"
             style="display: flex; gap: 10px; margin-top: 15px"
           >
-            <button type="submit" class="btn-primary">Create</button>
+            <button type="submit" class="btn-primary" style="flex: 1">
+              🚀 Generate Schedule
+            </button>
             <button
               type="button"
               class="btn-secondary"
               onclick="closeScheduleModal()"
+              style="flex: 1"
             >
               Cancel
             </button>
           </div>
         </form>
+
+        <!-- RESULTA NG AUTO-GENERATE -->
+        <div
+          id="generateResult"
+          style="
+            display: none;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            max-height: 350px;
+            overflow-y: auto;
+          "
+        >
+          <h3 style="font-size: 16px; margin-bottom: 10px">
+            📋 Generated Draft Schedule
+          </h3>
+          <table
+            style="
+              width: 100%;
+              font-size: 13px;
+              text-align: left;
+              border-collapse: collapse;
+            "
+          >
+            <thead style="background: #f4f4f4">
+              <tr>
+                <th style="padding: 8px; border-bottom: 2px solid #ddd">
+                  Station
+                </th>
+                <th style="padding: 8px; border-bottom: 2px solid #ddd">
+                  Shift
+                </th>
+                <th style="padding: 8px; border-bottom: 2px solid #ddd">
+                  Assigned Crew
+                </th>
+                <th style="padding: 8px; border-bottom: 2px solid #ddd">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody id="resultTableBody"></tbody>
+          </table>
+
+          <button
+            class="btn-primary"
+            style="width: 100%; margin-top: 15px"
+            onclick="publishSchedule()"
+          >
+            ✅ Publish Schedule
+          </button>
+        </div>
       </div>
     </div>
 

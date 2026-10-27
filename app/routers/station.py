@@ -20,6 +20,10 @@ def create_station(
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    # I-SECURITY CHECK: Kung Manager, pwede lang siya gumawa ng station sa branch niya.
+    if current_user.role == UserRole.MANAGER and station.branch_id != current_user.branch_id:
+        raise HTTPException(status_code=403, detail="You can only add stations to your assigned branch")
+
     # Check kung existing ang branch
     branch = db.query(Branch).filter(Branch.id == station.branch_id).first()
     if not branch:
@@ -45,7 +49,14 @@ def get_all_stations(
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    stations = db.query(Station).all()
+    # I-SECURITY CHECK: Filter ang makikita base sa role
+    if current_user.role == UserRole.ADMIN:
+        # Admin kita lahat
+        stations = db.query(Station).all()
+    else:
+        # Manager, kita lang yung stations sa branch niya
+        stations = db.query(Station).filter(Station.branch_id == current_user.branch_id).all()
+
     return [
         {
             "id": s.id,

@@ -28,3 +28,9 @@ class CrewResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ManagerCreate(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    branch_id: int

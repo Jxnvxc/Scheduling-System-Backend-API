@@ -5,7 +5,7 @@ from app.routers import user, schedule  # Import both
 from app.routers import user, schedule, stats
 from app.routers import user, schedule, stats, crew 
 from app.routers import user, schedule, stats, crew, availability, branch, station
-
+import app.models.assignment
 app = FastAPI(
     title="Scheduling API",
     description="Backend para sa SmartShift Scheduling System",

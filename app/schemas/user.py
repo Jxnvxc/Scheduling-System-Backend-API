@@ -1,27 +1,27 @@
-from pydantic import BaseModel, EmailStr, Field 
-from typing import Optional
+from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from sqlalchemy import true
-from app.models.user import UserRole
-  
+from typing import Optional
 
-class UserBase(BaseModel):
-  email: EmailStr
-  full_name: str = Field(..., min_length = 2, max_length = 100)
-  role: UserRole = UserRole.EMPLOYEE 
-
-class UserCreate(UserBase): 
-  password: str = Field(..., min_length=8, max_length=50)
-
+# ==========================================
+# MGA EXISTING SCHEMAS
+# ==========================================
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    role: str = "employee"
 
 class UserResponse(BaseModel):
-  id: int
-  is_active: bool
-  created_at : datetime
-  update_at: Optional[datetime] = None
+    id: int
+    email: str
+    full_name: str
+    role: str
+    branch_id: Optional[int] = None
+    is_active: bool
+    created_at: datetime
 
-  class config:
-    from_attributes = true
+    class Config:
+        from_attributes = True
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -31,10 +31,11 @@ class ChangePassword(BaseModel):
     old_password: str
     new_password: str
 
-
-
-  
-
-
-
-   
+# ==========================================
+# BAGONG SCHEMA PARA SA MANAGER CREATION
+# ==========================================
+class ManagerCreate(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    branch_id: int

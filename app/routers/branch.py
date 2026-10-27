@@ -16,8 +16,9 @@ def create_branch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
-        raise HTTPException(status_code=403, detail="Not authorized to create branches")
+    # PINALITAN NATIN: Admin lang ang pwedeng gumawa ng bagong branch
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only Admin can create new branches")
 
     existing = db.query(Branch).filter(Branch.name == branch.name).first()
     if existing:
@@ -43,4 +44,10 @@ def get_all_branches(
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail="Not authorized to view branches")
 
-    return db.query(Branch).all()
+    # PINALITAN NATIN: Data Isolation logic
+    if current_user.role == UserRole.ADMIN:
+        # Kapag Admin, kita lahat ng branches
+        return db.query(Branch).all()
+    else:
+        # Kapag Manager, yung naka-assign na branch_id lang ang kita
+        return db.query(Branch).filter(Branch.id == current_user.branch_id).all()
