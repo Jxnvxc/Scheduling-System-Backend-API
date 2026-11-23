@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import date, datetime, time, timedelta, timezone
 from pydantic import BaseModel, ConfigDict, Field
+import time
 
 from app.auth.branch_access import require_manager_branch_id
 from app.auth.dependencies import get_current_user
@@ -741,34 +742,49 @@ def _generate_single_day(
     pre_holiday_mirror_enabled: bool = False,
     holiday_info: dict | None = None,
     previous_day_assignments: list | None = None,
+    unavailable_employee_ids: set[int] | None = None,
+    availabilities_by_user_day: dict[tuple[int, str], list] | None = None,
 ) -> dict:
-    availability_rows = db.query(Availability).filter(
-        Availability.user_id.in_(employee_ids),
-        Availability.day_of_week == day_name,
-        Availability.valid_from <= schedule_date,
-        Availability.valid_to >= schedule_date,
-    ).all() if employee_ids else []
-    availabilities = {}
-    for availability in availability_rows:
-        availabilities.setdefault(availability.user_id, []).append(availability)
-    approved_leaves = db.query(CrewRequest.requester_id).filter(
-        CrewRequest.branch_id == branch_id,
-        CrewRequest.request_type == "leave",
-        CrewRequest.status == "approved",
-        CrewRequest.requester_id.in_(employee_ids),
-        CrewRequest.start_date <= schedule_date,
-        CrewRequest.end_date >= schedule_date,
-    ).all() if employee_ids else []
-    approved_absences = db.query(Absence.employee_id).filter(
-        Absence.branch_id == branch_id,
-        Absence.status == AbsenceStatus.APPROVED,
-        Absence.employee_id.in_(employee_ids),
-        Absence.absence_date == schedule_date.isoformat(),
-    ).all() if employee_ids else []
-    absence_employee_ids = {row.employee_id for row in approved_absences}
-    unavailable_employee_ids = (
-        {row.requester_id for row in approved_leaves} | absence_employee_ids
-    )
+    t_day0 = time.perf_counter()
+
+    # Backward-compatible: if caller didn't pre-load, query DB for this day
+    if unavailable_employee_ids is None:
+        approved_leaves = db.query(CrewRequest.requester_id).filter(
+            CrewRequest.branch_id == branch_id,
+            CrewRequest.request_type == "leave",
+            CrewRequest.status == "approved",
+            CrewRequest.requester_id.in_(employee_ids),
+            CrewRequest.start_date <= schedule_date,
+            CrewRequest.end_date >= schedule_date,
+        ).all() if employee_ids else []
+        approved_absences = db.query(Absence.employee_id).filter(
+            Absence.branch_id == branch_id,
+            Absence.status == AbsenceStatus.APPROVED,
+            Absence.employee_id.in_(employee_ids),
+            Absence.absence_date == schedule_date.isoformat(),
+        ).all() if employee_ids else []
+        absence_employee_ids = {row.employee_id for row in approved_absences}
+        unavailable_employee_ids = (
+            {row.requester_id for row in approved_leaves} | absence_employee_ids
+        )
+
+    if availabilities_by_user_day is None:
+        availability_rows = db.query(Availability).filter(
+            Availability.user_id.in_(employee_ids),
+            Availability.day_of_week == day_name,
+            Availability.valid_from <= schedule_date,
+            Availability.valid_to >= schedule_date,
+        ).all() if employee_ids else []
+        availabilities_by_user_day = {}
+        for a in availability_rows:
+            availabilities_by_user_day.setdefault((a.user_id, a.day_of_week), []).append(a)
+
+    # Build availabilities dict for this day from pre-loaded data
+    availabilities: dict[int, list] = {}
+    for emp_id in employee_ids:
+        day_windows = availabilities_by_user_day.get((emp_id, day_name), [])
+        if day_windows:
+            availabilities[emp_id] = day_windows
 
     assigned_employee_intervals: dict[int, list[tuple[datetime, datetime]]] = {}
 
@@ -1250,6 +1266,7 @@ def generate_full_week(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    t0 = time.perf_counter()
     branch_id = require_manager_branch_id(current_user)
 
     stations = db.query(Station).filter(Station.branch_id == branch_id).all()
@@ -1301,9 +1318,57 @@ def generate_full_week(
 
     pre_holiday_mirror_enabled = _get_pre_holiday_mirror_setting(db, branch_id)
 
+    # ---- LOAD ALL DAY-LEVEL DATA ONCE (fix N+1) ----
+    t_load0 = time.perf_counter()
+    all_availability = db.query(Availability).filter(
+        Availability.user_id.in_(employee_ids),
+        Availability.valid_from <= week_end,
+        Availability.valid_to >= week_start,
+    ).all() if employee_ids else []
+    all_leaves = db.query(CrewRequest.requester_id).filter(
+        CrewRequest.branch_id == branch_id,
+        CrewRequest.request_type == "leave",
+        CrewRequest.status == "approved",
+        CrewRequest.requester_id.in_(employee_ids),
+        CrewRequest.start_date <= week_end,
+        CrewRequest.end_date >= week_start,
+    ).all() if employee_ids else []
+    all_absences = db.query(Absence.employee_id).filter(
+        Absence.branch_id == branch_id,
+        Absence.status == AbsenceStatus.APPROVED,
+        Absence.employee_id.in_(employee_ids),
+        Absence.absence_date >= week_start.isoformat(),
+        Absence.absence_date <= week_end.isoformat(),
+    ).all() if employee_ids else []
+    t_load1 = time.perf_counter()
+
+    # Index availability by (user_id, day_name)
+    avail_by_user_day: dict[tuple[int, str], list] = {}
+    for a in all_availability:
+        day_name = a.day_of_week
+        avail_by_user_day.setdefault((a.user_id, day_name), []).append(a)
+
+    # Index leaves and absences by date
+    leave_by_date: dict[date, set[int]] = {}
+    for r in all_leaves:
+        start_d = r.start_date
+        end_d = r.end_date
+        cur = start_d
+        while cur <= end_d:
+            leave_by_date.setdefault(cur, set()).add(r.requester_id)
+            cur = cur + timedelta(days=1)
+
+    absence_by_date: dict[date, set[int]] = {}
+    for r in all_absences:
+        d = date.fromisoformat(r.absence_date) if isinstance(r.absence_date, str) else r.absence_date
+        absence_by_date.setdefault(d, set()).add(r.employee_id)
+
+    t0 = time.perf_counter()  # reset t0 after data load for accurate solve timing
+
     results = []
     for offset in range(7):
         day_date = week_start + timedelta(days=offset)
+        day_name = day_date.strftime("%A")
         holiday_info = None
         previous_day_assignments = None
         if pre_holiday_mirror_enabled:
@@ -1317,6 +1382,12 @@ def generate_full_week(
                 previous_day_assignments = _get_previous_day_assignments(
                     db, branch_id, previous_date
                 )
+
+        # Build per-day unavailable set from pre-loaded data
+        unavailable_employee_ids = (
+            leave_by_date.get(day_date, set()) | absence_by_date.get(day_date, set())
+        )
+
         results.append(
             _generate_single_day(
                 schedule_date=day_date,
@@ -1325,7 +1396,7 @@ def generate_full_week(
                 employees=employees,
                 stations=stations,
                 station_by_id=station_by_id,
-                day_name=day_date.strftime("%A"),
+                day_name=day_name,
                 employee_ids=employee_ids,
                 existing_assignments=[
                     assignment
@@ -1341,6 +1412,8 @@ def generate_full_week(
                 pre_holiday_mirror_enabled=pre_holiday_mirror_enabled,
                 holiday_info=holiday_info,
                 previous_day_assignments=previous_day_assignments,
+                unavailable_employee_ids=unavailable_employee_ids,
+                availabilities_by_user_day=avail_by_user_day,
             )
         )
 
@@ -1394,6 +1467,10 @@ def generate_full_week(
             "solver_status": "FEASIBLE" if total_missing == 0 else "PARTIAL",
             "shortage_summary": shortage_summary,
         }
+
+    t_end = time.perf_counter()
+    print(f"[TIMING] generate_full_week: total={t_end - t_load1:.2f}s, "
+          f"slots={total_required}, assigned={total_assigned}, missing={total_missing}")
 
     return results
 
