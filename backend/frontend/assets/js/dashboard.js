@@ -153,20 +153,12 @@ document.getElementById("generateScheduleForm").addEventListener("submit", async
             resultDiv.style.display = "block";
             resultBody.innerHTML = "";
 
-            // Fetch solver metrics + shortage summary
-            try {
-                const sumRes = await fetch(`${API_URL}/schedules/shortage-summary?schedule_date=${date}`, {
-                    headers: { "Authorization": `Bearer ${token}` }
-                });
-                if (sumRes.ok) {
-                    const sumData = await sumRes.json();
-                    renderSummaryCards(sumData);
-                    renderShortageTab(sumData);
-                    renderHoursTab(sumData);
-                }
-            } catch (err) {
-                console.error("Shortage summary fetch failed:", err);
-            }
+            // Compute summary metrics locally from generate-full-week result
+            // (avoids a second full schedule generation via /shortage-summary)
+            const sumData = buildSummaryFromData(data);
+            renderSummaryCards(sumData);
+            renderShortageTab(sumData);
+            renderHoursTab(sumData);
 
             // Render schedule tab
             renderSchedulePreview(data);
@@ -834,7 +826,80 @@ function renderSummaryCards(sumData) {
     }
 }
 
-// ---- Mga Shortage tab ----
+// ---- Build summary metrics locally (avoid double generation) ----
+function buildSummaryFromData(data) {
+    let totalRequired = 0, totalAssigned = 0, totalMissing = 0;
+    const employeeHours = {};
+    const byDay = {};
+    const byShift = {};
+    const byStation = {};
+    const byReason = {};
+    const unfilledItems = [];
+
+    for (const day of data) {
+        const dayKey = String(day.date);
+        const dayEntry = { total: 0, by_shift: {}, by_station: {} };
+        byDay[dayKey] = dayEntry;
+
+        for (const slot of (day.schedule || [])) {
+            const needed = slot.needed || 0;
+            const assigned = (slot.assigned || []).length;
+            totalRequired += needed;
+            totalAssigned += assigned;
+            if (assigned < needed) totalMissing += (needed - assigned);
+
+            // Per-employee hours
+            const stationId = slot.station_id;
+            for (const emp of (slot.assigned || [])) {
+                const eid = emp.id;
+                // Approximate 8 hours per shift (start-end diff)
+                const [startTime] = (slot.time || "08:00 - 16:00").split(" - ");
+                const [sh, sm] = startTime.split(":").map(Number);
+                const [eh, em] = (slot.time || "08:00 - 16:00").split(" - ")[1].split(":").map(Number);
+                const shiftHours = (eh * 60 + em - sh * 60 - sm) / 60;
+                employeeHours[eid] = (employeeHours[eid] || 0) + shiftHours;
+            }
+        }
+
+        for (const u of (day.unfilled || [])) {
+            dayEntry.total += u.missing || 0;
+            dayEntry.by_shift[u.shift] = (dayEntry.by_shift[u.shift] || 0) + (u.missing || 0);
+            dayEntry.by_station[u.station] = (dayEntry.by_station[u.station] || 0) + (u.missing || 0);
+
+            byShift[u.shift] = (byShift[u.shift] || 0) + (u.missing || 0);
+            byStation[u.station] = (byStation[u.station] || 0) + (u.missing || 0);
+            if (u.breakdown) {
+                for (const [rk, cnt] of Object.entries(u.breakdown || {})) {
+                    if (cnt) byReason[rk] = (byReason[rk] || 0) + cnt;
+                }
+            }
+            unfilledItems.push({ date: day.date, ...u });
+        }
+    }
+
+    const coveragePct = totalRequired ? Math.round((totalAssigned / totalRequired) * 100) : 100;
+    const hoursValues = Object.values(employeeHours);
+    const avgHours = hoursValues.length ? Math.round((hoursValues.reduce((a, b) => a + b, 0) / hoursValues.length) * 10) / 10 : 0;
+    const hoursSpread = hoursValues.length ? Math.round((Math.max(...hoursValues) - Math.min(...hoursValues)) * 10) / 10 : 0;
+    const overtimeCount = hoursValues.filter(h => h > 40).length;
+
+    return {
+        total_required: totalRequired,
+        total_assigned: totalAssigned,
+        total_missing: totalMissing,
+        coverage_pct: coveragePct,
+        average_hours: avgHours,
+        hours_spread: hoursSpread,
+        overtime_count: overtimeCount,
+        solver_status: totalMissing === 0 ? "OPTIMAL" : totalMissing < 10 ? "FEASIBLE" : "PARTIAL",
+        by_day: byDay,
+        by_shift: byShift,
+        by_station: byStation,
+        by_reason: byReason,
+        unfilled_items: unfilledItems,
+        employee_hours: employeeHours,
+    };
+}
 function renderShortageTab(sumData) {
     const tbody = document.getElementById("shortageTableBody");
     if (!tbody) return;
