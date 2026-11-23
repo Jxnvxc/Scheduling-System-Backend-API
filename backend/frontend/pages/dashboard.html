@@ -106,6 +106,10 @@
                 <button type="submit" id="genBtn" class="btn-primary">
                   <span id="genBtnText">Lagyan ng schedule</span>
                   <span id="genBtnSpinner" class="spinner" style="display:none;"></span>
+                  <span id="genElapsed" class="elapsed-time"></span>
+                </button>
+                <button type="button" id="genCancelBtn" class="btn-secondary" style="display:none;" onclick="cancelGeneration()">
+                  Cancel
                 </button>
               </div>
               <div id="genError" class="gen-error" style="display:none;"></div>
