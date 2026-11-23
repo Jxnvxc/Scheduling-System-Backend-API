@@ -104,9 +104,10 @@ function normalizeTime(value) {
     return value;
 }
 
-function renderRequirements(requirements, stationPriorities) {
+function renderRequirements(requirements, stationPriorities = new Map()) {
     tableBody.replaceChildren();
-    if (requirements.length === 0) {
+    const reqs = requirements || [];
+    if (reqs.length === 0) {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
         cell.colSpan = 6;
@@ -125,7 +126,7 @@ function renderRequirements(requirements, stationPriorities) {
     bottomOrder.forEach((name, index) => bottomRank.set(name.toLowerCase(), index));
 
     const shiftsByStation = new Map();
-    requirements.forEach(requirement => {
+    reqs.forEach(requirement => {
         const shifts = shiftsByStation.get(requirement.station_id) || [];
         shifts.push(requirement);
         shiftsByStation.set(requirement.station_id, shifts);
@@ -680,7 +681,7 @@ form.addEventListener("submit", async event => {
             method: "PUT",
             body: JSON.stringify({ requirements }),
         });
-        renderRequirements(updated);
+        renderRequirements(updated, stationPriorities);
         showMessage("Staffing requirements saved.", "success");
     } catch (error) {
         showMessage(error.message);
