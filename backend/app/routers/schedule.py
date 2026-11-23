@@ -1271,6 +1271,8 @@ def generate_full_week(
         ShiftAssignment.schedule_date <= week_end + timedelta(days=1),
     ).all()
 
+    employees_by_id = {emp.id: emp for emp in employees}
+
     requirements = db.query(StaffingRequirement).filter(
         StaffingRequirement.branch_id == branch_id,
     ).all()
@@ -1341,6 +1343,57 @@ def generate_full_week(
                 previous_day_assignments=previous_day_assignments,
             )
         )
+
+    # Compute solver metrics across the whole week
+    total_required = sum(d["total_required"] for d in results)
+    total_assigned = sum(d["total_assigned"] for d in results)
+    total_missing = sum(d["total_missing"] for d in results)
+    coverage_pct = round((total_assigned / total_required) * 100, 1) if total_required else 100.0
+
+    # Per-employee hours
+    employee_hours: dict[int, float] = {}
+    for day in results:
+        for slot in day["schedule"]:
+            for assigned in slot["assigned"]:
+                eid = assigned["id"]
+                employee_hours[eid] = employee_hours.get(eid, 0) + slot_hours(
+                    slot["shift"],
+                    station=station_by_id.get(slot["station_id"]),
+                )
+
+    hours_values = list(employee_hours.values())
+    avg_hours = round(sum(hours_values) / len(hours_values), 1) if hours_values else 0.0
+    hours_spread = round(max(hours_values) - min(hours_values), 1) if hours_values else 0.0
+    overtime_count = sum(
+        1 for eid, h in employee_hours.items()
+        if (employees_by_id.get(eid).max_hours if employees_by_id.get(eid) else 80) < h
+    )
+
+    # Shortage summary grouped by day, shift, station
+    shortage_summary: dict[str, dict] = {}
+    for day in results:
+        day_key = str(day["date"])
+        day_summary = shortage_summary.setdefault(day_key, {"total": 0, "by_shift": {}, "by_station": {}})
+        day_summary["total"] += day["total_missing"]
+        for u in day["unfilled"]:
+            shift_key = u["shift"]
+            station_key = u["station"]
+            day_summary["by_shift"][shift_key] = day_summary["by_shift"].get(shift_key, 0) + u["missing"]
+            day_summary["by_station"][station_key] = day_summary["by_station"].get(station_key, 0) + u["missing"]
+
+    # Add solver metrics to each day's result
+    for day in results:
+        day["solver_metrics"] = {
+            "coverage_pct": coverage_pct,
+            "total_required": total_required,
+            "total_assigned": total_assigned,
+            "total_missing": total_missing,
+            "average_hours": avg_hours,
+            "hours_spread": hours_spread,
+            "overtime_count": overtime_count,
+            "solver_status": "FEASIBLE" if total_missing == 0 else "PARTIAL",
+            "shortage_summary": shortage_summary,
+        }
 
     return results
 
@@ -1435,3 +1488,91 @@ def validate_schedule_draft(
 ):
     _, _, errors = _validate_schedule_request(payload, db, current_user)
     return {"valid": not errors, "errors": structured_issues(errors)}
+
+
+@router.post("/shortage-summary")
+def shortage_summary(
+    schedule_date: date,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return aggregated shortage data for the week starting at schedule_date."""
+    branch_id = require_manager_branch_id(current_user)
+    week_start, week_end = week_bounds(schedule_date)
+
+    results = generate_full_week(schedule_date=schedule_date, db=db, current_user=current_user)
+
+    total_required = sum(d["total_required"] for d in results)
+    total_assigned = sum(d["total_assigned"] for d in results)
+    total_missing = sum(d["total_missing"] for d in results)
+    coverage_pct = round((total_assigned / total_required) * 100, 1) if total_required else 100.0
+
+    # Per-employee hours
+    employees = db.query(User).filter(
+        User.branch_id == branch_id,
+        User.role == UserRole.EMPLOYEE,
+        User.is_active.is_(True),
+    ).all()
+    employees_by_id = {emp.id: emp for emp in employees}
+    station_by_id = {s.id: s for s in db.query(Station).filter(Station.branch_id == branch_id).all()}
+
+    employee_hours: dict[int, float] = {}
+    for day in results:
+        for slot in day["schedule"]:
+            for assigned in slot["assigned"]:
+                eid = assigned["id"]
+                employee_hours[eid] = employee_hours.get(eid, 0) + shift_hours(
+                    slot["shift"],
+                    station=station_by_id.get(slot["station_id"]),
+                )
+
+    hours_values = list(employee_hours.values())
+    avg_hours = round(sum(hours_values) / len(hours_values), 1) if hours_values else 0.0
+    hours_spread = round(max(hours_values) - min(hours_values), 1) if hours_values else 0.0
+    overtime_count = sum(
+        1 for eid, h in employee_hours.items()
+        if (employees_by_id.get(eid).max_hours if employees_by_id.get(eid) else 80) < h
+    )
+
+    # Shortage summary grouped by day, shift, station
+    by_day: dict[str, dict] = {}
+    by_shift: dict[str, int] = {}
+    by_station: dict[str, int] = {}
+    by_reason: dict[str, int] = {}
+    unfilled_items = []
+
+    for day in results:
+        day_key = str(day["date"])
+        day_entry = by_day.setdefault(day_key, {"total": 0, "by_shift": {}, "by_station": {}})
+        day_entry["total"] += day["total_missing"]
+        for u in day["unfilled"]:
+            shift_key = u["shift"]
+            station_key = u["station"]
+            day_entry["by_shift"][shift_key] = day_entry["by_shift"].get(shift_key, 0) + u["missing"]
+            day_entry["by_station"][station_key] = day_entry["by_station"].get(station_key, 0) + u["missing"]
+            by_shift[shift_key] = by_shift.get(shift_key, 0) + u["missing"]
+            by_station[station_key] = by_station.get(station_key, 0) + u["missing"]
+            if u.get("breakdown"):
+                for reason_key, count in u["breakdown"].items():
+                    if count:
+                        by_reason[reason_key] = by_reason.get(reason_key, 0) + count
+            unfilled_items.append(u)
+
+    return {
+        "week_start": str(week_start),
+        "week_end": str(week_end),
+        "total_required": total_required,
+        "total_assigned": total_assigned,
+        "total_missing": total_missing,
+        "coverage_pct": coverage_pct,
+        "average_hours": avg_hours,
+        "hours_spread": hours_spread,
+        "overtime_count": overtime_count,
+        "solver_status": "OPTIMAL" if total_missing == 0 else "FEASIBLE" if total_missing < 10 else "PARTIAL",
+        "by_day": by_day,
+        "by_shift": by_shift,
+        "by_station": by_station,
+        "by_reason": by_reason,
+        "unfilled_items": unfilled_items,
+        "employee_hours": {str(eid): h for eid, h in employee_hours.items()},
+    }
