@@ -552,6 +552,20 @@ function applyShiftTimesToAll(sourceStationId) {
     showMessage("Shift hours copied to all stations. Click Save requirements to apply.", "success");
 }
 
+function readStationPriorities() {
+    const priorities = new Map();
+    document.querySelectorAll(".station-priority-input").forEach(select => {
+        const stationRow = select.closest("tr.staffing-station-row.compact");
+        if (stationRow) {
+            const stationId = Number(stationRow.dataset.stationId);
+            const nameEl = stationRow.querySelector(".station-compact-name");
+            const stationName = nameEl ? nameEl.textContent.trim() : "";
+            priorities.set(stationId, { id: stationId, name: stationName, priority: Number(select.value) });
+        }
+    });
+    return priorities;
+}
+
 function readRequirementRows() {
     return Array.from(
         tableBody.querySelectorAll("tr[data-station-id][data-shift-type]"),
@@ -681,6 +695,31 @@ form.addEventListener("submit", async event => {
             method: "PUT",
             body: JSON.stringify({ requirements }),
         });
+
+        // Persist station priority changes (P1/P2/P3) via station update endpoint.
+        const newPriorities = readStationPriorities();
+        const changedStations = [];
+        newPriorities.forEach((info, stationId) => {
+            const current = stationPriorities.get(stationId);
+            if (current !== info.priority) {
+                changedStations.push(info);
+            }
+        });
+
+        for (const info of changedStations) {
+            try {
+                await requestJson(`/stations/${info.id}`, {
+                    method: "PUT",
+                    body: JSON.stringify({ name: info.name, priority: info.priority }),
+                });
+                stationPriorities.set(info.id, info.priority);
+            } catch (err) {
+                showMessage(`Hindi ma-update ang priority ng station "${info.name}": ${err.message}`, "error");
+                saveButton.disabled = false;
+                return;
+            }
+        }
+
         renderRequirements(updated, stationPriorities);
         showMessage("Staffing requirements saved.", "success");
     } catch (error) {
