@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Staffing Requirements</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <aside class="sidebar">
+        <div class="logo"><h2>SmartShift</h2></div>
+        <nav class="nav-menu" aria-label="Main navigation">
+          <a href="dashboard.html" class="nav-link">Overview</a>
+          <a href="stations.html" class="nav-link">Stations</a>
+          <a href="staffing-requirements.html" class="nav-link active" aria-current="page">Staffing requirements</a>
+          <a href="absences.html" class="nav-link">Absences</a>
+          <a href="crew-management.html" class="nav-link">Crew management</a>
+          <a href="team.html" class="nav-link">Team</a>
+          <a href="change-password.html" class="nav-link">Change password</a>
+        </nav>
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="userName">Loading...</span>
+            <span class="user-role" id="userRole">Loading...</span>
+          </div>
+          <button class="btn-logout" id="logoutButton" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="top-bar">
+          <div>
+            <p class="page-eyebrow">Branch operations</p>
+            <h1>Staffing requirements</h1>
+          </div>
+          <p class="welcome-message">Welcome, <strong id="topBarName">Loading...</strong></p>
+        </header>
+
+        <section class="welcome-section">
+          <h2>Set shifts and crew needs by station</h2>
+          <p>Opening, Mid, and Closing assignments are generated automatically using crew availability and station qualifications. Set the hours and required crew count for each shift; use 0 when a shift does not need crew.</p>
+        </section>
+
+        <p id="requirementsMessage" class="status-message" role="status" aria-live="polite"></p>
+
+        <form id="requirementsForm" class="content-card">
+          <div class="section-heading">
+            <div>
+              <h2>Station shift templates</h2>
+              <p>Opening, Mid, and Closing assignments are generated automatically using crew availability and station qualifications. Set the hours and required crew count for each shift; use 0 when a shift does not need crew.</p>
+            </div>
+          </div>
+          <div class="staffing-toolbar">
+            <div class="toolbar-search">
+              <label for="stationSearch" class="visually-hidden">Filter stations</label>
+              <input type="search" id="stationSearch" placeholder="Filter stations by name…" />
+            </div>
+            <div class="toolbar-actions">
+              <button type="button" class="btn-secondary btn-sm" id="expandAllStations">Expand all</button>
+              <button type="button" class="btn-secondary btn-sm" id="collapseAllStations">Collapse all</button>
+            </div>
+          </div>
+          <div class="table-scroll-card staffing-requirements-table">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Stations · select a station to configure shifts</th>
+                </tr>
+              </thead>
+              <tbody id="requirementsTableBody">
+                <tr><td>Loading staffing requirements...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="staffing-requirements-actions">
+            <p class="field-help">Shifts must end later than they start. Required crew range: 0–100. Assignments are made automatically.</p>
+            <button type="submit" class="btn-primary" id="saveRequirementsButton" disabled>Save requirements</button>
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <script src="../assets/js/api-config.js"></script>
+    <script src="../assets/js/staffing-requirements.js?v=tab-auth-2"></script>
+  </body>
+</html>

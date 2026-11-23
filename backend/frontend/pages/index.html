@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f0f6f4" />
+    <title>SmartShift - Sign in</title>
+    <link rel="stylesheet" href="../assets/css/style.css" />
+  </head>
+  <body>
+    <main class="login-container">
+      <h1>SmartShift</h1>
+      <h2>Scheduling system</h2>
+
+      <form id="loginForm">
+        <fieldset class="account-type-group">
+          <legend>Choose your account</legend>
+          <div class="account-type-options">
+            <label class="account-type-option">
+              <input type="radio" name="accountType" value="employee" checked />
+              Crew
+            </label>
+            <label class="account-type-option">
+              <input type="radio" name="accountType" value="manager" />
+              Manager
+            </label>
+            <label class="account-type-option">
+              <input type="radio" name="accountType" value="head" />
+              Head
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <input
+            type="email"
+            id="email"
+            autocomplete="email"
+            placeholder="Enter your email"
+            required
+          />
+        </div>
+
+        <div class="form-group" id="staffIdGroup">
+          <label for="staffId" id="staffIdLabel">Employee ID</label>
+          <input
+            type="text"
+            id="staffId"
+            inputmode="numeric"
+            pattern="[0-9]+"
+            maxlength="32"
+            autocomplete="off"
+            placeholder="Enter your Employee ID"
+            required
+          />
+          <p class="id-hint" id="staffIdHint">
+            Use the Employee ID assigned by your manager.
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            type="password"
+            id="password"
+            autocomplete="current-password"
+            placeholder="Enter your password"
+            required
+          />
+        </div>
+
+        <button type="submit">Sign in</button>
+      </form>
+
+      <div id="message" class="message" role="status" aria-live="polite"></div>
+      <p class="register-link">
+        Crew accounts are created by your Manager via email. Ask an authorized
+        account to add you to the team.
+      </p>
+    </main>
+
+    <script src="../assets/js/api-config.js"></script>
+    <script src="../assets/js/auth.js?v=tab-auth-1"></script>
+  </body>
+</html>

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Crew Management</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css" />
+    <link rel="stylesheet" href="../assets/css/crew-management.css" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <aside class="sidebar">
+        <div class="logo"><h2>SmartShift</h2></div>
+        <nav class="nav-menu" aria-label="Main navigation">
+          <a href="dashboard.html" class="nav-link">Overview</a>
+          <a href="stations.html" class="nav-link">Stations</a>
+          <a href="staffing-requirements.html" class="nav-link">Staffing requirements</a>
+          <a href="absences.html" class="nav-link">Absences</a>
+          <a href="crew-management.html" class="nav-link active" aria-current="page">Crew management</a>
+          <a href="availability-overview.html" class="nav-link manager-only">Crew availability</a>
+          <a href="change-password.html" class="nav-link">Change password</a>
+        </nav>
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="userName">Loading...</span>
+            <span class="user-role" id="userRole">Loading...</span>
+          </div>
+          <button class="btn-logout" id="logoutButton" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="top-bar">
+          <div>
+            <p class="page-eyebrow">Team administration</p>
+            <h1>Crew management</h1>
+          </div>
+          <p class="welcome-message">Welcome, <strong id="topBarName">Loading...</strong></p>
+        </header>
+
+        <section class="page-intro" aria-labelledby="pageIntroHeading">
+          <div>
+            <h2 id="pageIntroHeading">Build and manage your team</h2>
+            <p>Add crew to your branch, record their company-issued Employee ID, and manage their skills and weekly hours.</p>
+          </div>
+          <div class="branch-card" aria-live="polite">
+            <span class="branch-card-label">Your branch</span>
+            <strong id="assignedBranchName">Loading branch...</strong>
+          </div>
+        </section>
+
+        <p id="crewMessage" class="crew-message" role="status" aria-live="polite"></p>
+
+        <section class="content-card" aria-labelledby="createCrewHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="createCrewHeading">Add a crew member</h2>
+              <p>Employee IDs are unique and may include leading zeroes.</p>
+            </div>
+            <span class="section-tag">New account</span>
+          </div>
+
+          <div class="credential-notice">
+            <strong>Initial password notice</strong>
+            New crew accounts currently share the system's default initial password. Share it privately and have each crew member change it immediately after signing in.
+          </div>
+
+          <form id="crewForm" class="crew-form">
+            <label class="field">
+              <span>Full name</span>
+              <input type="text" id="crew_name" maxlength="255" autocomplete="name" placeholder="e.g. Juan Dela Cruz" required />
+            </label>
+            <label class="field">
+              <span>Email address</span>
+              <input type="email" id="crew_email" autocomplete="email" placeholder="e.g. juan@example.com" required />
+            </label>
+            <label class="field">
+              <span>Employee ID</span>
+              <input
+                type="text"
+                id="crew_employee_number"
+                inputmode="numeric"
+                pattern="[0-9]+"
+                maxlength="32"
+                autocomplete="off"
+                placeholder="Company-issued ID"
+                aria-describedby="employeeIdHelp"
+                required
+              />
+              <small id="employeeIdHelp">Digits only. Leading zeroes are preserved.</small>
+            </label>
+            <label class="field">
+              <span>Employment type</span>
+              <select id="employment_type" required>
+                <option value="">Select employment type</option>
+                <option value="Full-time">Full-time</option>
+                <option value="Part-time">Part-time</option>
+              </select>
+            </label>
+
+            <fieldset class="choice-field">
+              <legend>Crew type and skills</legend>
+              <div id="crew-type-container" class="choice-list">
+                <label class="choice-chip"><input type="checkbox" class="crew-type-cb" value="Production crew" />Production crew</label>
+                <label class="choice-chip"><input type="checkbox" class="crew-type-cb" value="Service crew" />Service crew</label>
+                <label class="choice-chip"><input type="checkbox" class="crew-type-cb" value="Gel crew" />Gel crew</label>
+                <label class="choice-chip"><input type="checkbox" class="crew-type-cb" value="Crew Trainer" />Crew Trainer</label>
+                <label class="choice-chip"><input type="checkbox" class="crew-type-cb" value="Maintenance crew" />Maintenance crew</label>
+              </div>
+            </fieldset>
+
+            <fieldset class="hours-field">
+              <legend>Weekly hours</legend>
+              <div class="hours-grid">
+                <label class="field">
+                  <span>Minimum hours</span>
+                  <input type="number" id="min_hours" min="0" max="168" value="40" required />
+                </label>
+                <label class="field">
+                  <span>Maximum hours</span>
+                  <input type="number" id="max_hours" min="0" max="168" value="80" required />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="stations-field">
+              <legend>Qualified stations</legend>
+              <p class="field-help">Select the stations this crew member is trained to work at.</p>
+              <div id="stations-checkboxes" class="choice-list" aria-live="polite">
+                <span class="loading-note">Loading branch stations...</span>
+              </div>
+            </fieldset>
+
+            <div class="form-actions">
+              <button type="submit" id="addCrewButton" class="btn-primary">Add crew member</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="content-card crew-list-card" aria-labelledby="crewListHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="crewListHeading">Your crew</h2>
+              <p>Update Employee IDs for existing crew accounts from your branch.</p>
+            </div>
+            <div class="crew-cycle-controls">
+              <div class="crew-cycle-info" id="crewCycleInfo" aria-live="polite">
+                <span class="crew-cycle-label">Current cycle:</span>
+                <strong id="crewCycleRange">Loading...</strong>
+              </div>
+              <button type="button" class="btn-danger-outline" id="reset15DayHoursButton">Reset 15-Day Hours</button>
+              <span id="crewCount" class="section-tag">Loading...</span>
+            </div>
+          </div>
+          <div id="crew-list" aria-live="polite">
+            <div class="empty-state">Loading crew members...</div>
+          </div>
+        </section>
+
+        <section class="content-card" aria-labelledby="bulkAvailHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="bulkAvailHeading">Bulk Availability Import</h2>
+              <p>Paste multiple crew availability entries at once (one per line).</p>
+            </div>
+          </div>
+          <div class="bulk-import-form">
+            <p class="field-help">
+              Format: <code>employee_number,day_of_week,start_time,end_time,valid_from,valid_to</code><br>
+              Example: <code>EMP001,Monday,08:00,16:00,2024-01-01,2024-12-31</code>
+            </p>
+            <textarea id="bulkAvailText" placeholder="Paste multiple lines here..."></textarea>
+            <div class="form-actions">
+              <button type="button" id="bulkAvailBtn" class="btn-primary">Import Availability</button>
+              <button type="button" id="downloadTemplateBtn" class="btn-secondary">Download Template</button>
+            </div>
+            <p id="bulkAvailMessage" class="status-message" role="status" aria-live="polite"></p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="../assets/js/api-config.js"></script>
+    <script src="../assets/js/crew-management.js?v=tab-auth-2"></script>
+  </body>
+</html>

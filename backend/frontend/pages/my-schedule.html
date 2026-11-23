@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - My Schedule</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css?v=schedule-ack-1" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <aside class="sidebar">
+        <div class="logo"><h2>SmartShift</h2></div>
+        <nav class="nav-menu">
+          <a href="dashboard.html" class="nav-link">Overview</a>
+          <a href="my-schedule.html" class="nav-link active" aria-current="page">My schedule</a>
+          <a href="my-availability.html" class="nav-link">My availability</a>
+          <a href="change-password.html" class="nav-link">Change password</a>
+        </nav>
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="userName">Loading...</span>
+            <span class="user-role" id="userRole">Crew</span>
+          </div>
+          <button class="btn-logout" id="logoutButton" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="top-bar">
+          <div>
+            <p class="page-eyebrow">Crew workspace</p>
+            <h1>My schedule</h1>
+          </div>
+          <div class="branch-info">
+            <span>Welcome, <strong id="topBarName">Loading...</strong></span>
+          </div>
+        </header>
+
+        <section class="content-card">
+          <div class="welcome-section">
+            <h2>Published shifts</h2>
+            <p>Only schedules published by your manager appear here. Please acknowledge each schedule after reviewing it.</p>
+          </div>
+          <div id="myScheduleList" class="my-schedule-list" aria-live="polite">
+            <p class="schedule-tracking-empty">Loading your schedule...</p>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="../assets/js/api-config.js"></script>
+    <script src="../assets/js/schedule-notifications.js?v=schedule-ack-1"></script>
+    <script src="../assets/js/my-schedule.js?v=schedule-ack-1"></script>
+  </body>
+</html>

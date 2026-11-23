@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Absences</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <aside class="sidebar">
+        <div class="logo"><h2>SmartShift</h2></div>
+        <nav class="nav-menu" aria-label="Main navigation">
+          <a href="dashboard.html" class="nav-link">Overview</a>
+          <a href="absences.html" class="nav-link active" aria-current="page">Absences</a>
+          <a href="change-password.html" class="nav-link">Change password</a>
+        </nav>
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="userName">Loading...</span>
+            <span class="user-role" id="userRole">Loading...</span>
+          </div>
+          <button class="btn-logout" id="logoutButton" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="top-bar">
+          <div>
+            <p class="page-eyebrow">Absence management</p>
+            <h1>Absences</h1>
+          </div>
+          <p class="welcome-message">Welcome, <strong id="topBarName">Loading...</strong></p>
+        </header>
+
+        <p id="absenceMessage" class="crew-message" role="status" aria-live="polite"></p>
+
+        <section class="content-card" id="requestSection" aria-labelledby="requestHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="requestHeading">Request absence</h2>
+              <p>Submit an absence request for your assigned branch.</p>
+            </div>
+          </div>
+          <form id="absenceForm" class="crew-form">
+            <label class="field">
+              <span>Absence date</span>
+              <input type="date" id="absence_date" required />
+            </label>
+            <label class="field">
+              <span>Reason</span>
+              <textarea id="absence_reason" rows="3" required></textarea>
+            </label>
+            <label class="field">
+              <span>Proof image (optional)</span>
+              <input type="file" id="absence_proof" accept="image/*" />
+              <div id="proofPreview" class="proof-preview" style="display:none;"></div>
+              <button type="button" id="proofRemove" class="proof-remove" style="display:none;">Remove</button>
+            </label>
+            <div class="form-actions">
+              <button type="submit" id="requestButton" class="btn-primary">Submit request</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="content-card" id="recordsSection" aria-labelledby="listHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="listHeading">Absence records</h2>
+              <p id="listSubtitle">Loading...</p>
+            </div>
+            <span id="absenceCount" class="section-tag">Loading...</span>
+          </div>
+          <div id="absence-list" aria-live="polite">
+            <div class="empty-state">Loading absences...</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="../assets/js/api-config.js"></script>
+    <script src="../assets/js/auth.js"></script>
+    <script src="../assets/js/absences.js"></script>
+  </body>
+</html>

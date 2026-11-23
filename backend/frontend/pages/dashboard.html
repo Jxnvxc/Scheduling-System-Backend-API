@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Dashboard</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css?v=schedule-ack-1" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="logo"><h2>SmartShift</h2></div>
+        <nav class="nav-menu">
+          <a href="dashboard.html" class="nav-link active">Overview</a>
+          <a href="requests.html" class="nav-link">Requests</a>
+
+          <!-- Manager tools -->
+          <a href="stations.html" class="nav-link manager-only">Stations</a>
+          <a href="staffing-requirements.html" class="nav-link manager-only">Staffing requirements</a>
+          <a href="absences.html" class="nav-link">Absences</a>
+          <a href="crew-management.html" class="nav-link manager-only"
+            >Crew management</a
+          >
+          <a href="team.html" class="nav-link manager-only">Team</a>
+          <a href="#scheduleTracking" class="nav-link manager-only">Schedules</a>
+
+          <!-- Crew tools -->
+          <a href="my-schedule.html" class="nav-link crew-only">My schedule</a>
+          <a href="my-availability.html" class="nav-link crew-only"
+            >My availability</a
+          >
+          <a href="change-password.html" class="nav-link">Change password</a>
+        </nav>
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="userName">Loading...</span>
+            <span class="user-role" id="userRole">Loading...</span>
+          </div>
+          <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+      </aside>
+
+      <!-- MAIN CONTENT -->
+      <main class="main-content">
+        <header class="top-bar">
+          <div>
+            <p class="page-eyebrow">SmartShift workspace</p>
+            <h1>Dashboard</h1>
+          </div>
+          <div class="branch-info">
+            <span>Welcome, <strong id="topBarName">Loading...</strong></span>
+            <div id="currentDateTime" class="current-datetime">Loading date&hellip;</div>
+          </div>
+        </header>
+
+        <!-- MANAGER OVERVIEW -->
+        <section class="role-section manager-only">
+          <div class="welcome-section">
+            <h2>Manager overview</h2>
+            <p>Manage your branch operations and team.</p>
+          </div>
+          <section class="assigned-branch-card" aria-live="polite">
+            <span class="assigned-branch-icon" aria-hidden="true">⌖</span>
+            <div>
+              <span class="assigned-branch-label">Your assigned branch</span>
+              <strong id="assignedBranchName" class="assigned-branch-name">Loading branch...</strong>
+              <p id="assignedBranchStatus" class="assigned-branch-status">Branch access is managed by Head.</p>
+            </div>
+          </section>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>Team Members</h3>
+              <p class="stat-number" id="teamMembersCount">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>Today's Staff</h3>
+              <p class="stat-number" id="todaysStaffCount">0</p>
+            </div>
+            <div class="stat-card">
+              <h3>Coverage</h3>
+              <p class="stat-number" id="coveragePercent">0%</p>
+            </div>
+            <div class="stat-card">
+              <h3>Conflicts</h3>
+              <p class="stat-number" id="conflictsCount">0</p>
+            </div>
+          </div>
+          <div class="schedule-gen-panel">
+            <div class="schedule-gen-header">
+              <h2>Generate schedule</h2>
+              <p class="schedule-guidance">
+                Susuriin ang skills, availability, weekly maximum hours, at
+                11-hour minimum rest. Uunahin ang crew na hindi pa naaabot ang
+                minimum hours, pagkatapos ay ang may mas mababang naka-assign
+                na oras. Hindi muna kasama ang AI demand forecasting.
+                Nag-generate ng buong linggo (Mon–Sun); i-publish nang
+                isa-isa sa bawat araw.
+              </p>
+            </div>
+            <form id="generateScheduleForm" class="schedule-gen-form">
+              <div class="schedule-date-field">
+                <label for="gen_week_start">Week start (Monday)</label>
+                <input type="date" id="gen_week_start" required />
+                <button type="submit" class="btn-primary">Generate schedule</button>
+              </div>
+            </form>
+            <div id="generateResult" class="schedule-result" style="display: none">
+              <div class="schedule-preview-heading">
+                <div>
+                  <p class="page-eyebrow">Schedule preview</p>
+                  <h3>Generated draft schedule</h3>
+                  <p id="schedulePreviewDetails" class="schedule-preview-details"></p>
+                </div>
+              </div>
+              <div id="publishValidationMessage" class="publish-validation-message" role="alert">
+                Crew assignments are generated automatically, then checked for coverage before publishing.
+              </div>
+              <div id="scheduleIssuesDetails" class="schedule-issues-details" style="display: none"></div>
+              <div id="understaffedBanner" class="understaffed-banner" style="display: none">
+                <span class="understaffed-icon" aria-hidden="true">⚠️</span>
+                <div class="understaffed-content">
+                  <strong class="understaffed-title">Understaffed slots detected</strong>
+                  <span class="understaffed-count" id="understaffedCount">0 / 0 slots filled</span>
+                  <span class="understaffed-shortage" id="understaffedShortage">0 shortages</span>
+                </div>
+                <button type="button" class="btn-secondary btn-sm" id="showShortagesToggle" onclick="toggleShowShortages()">
+                  Show shortages only
+                </button>
+              </div>
+              <div id="unfilledSlotsList" class="unfilled-slots-list" style="display: none">
+                <h4 class="unfilled-slots-heading">Unfilled slots</h4>
+                <ul id="unfilledSlotsItems" class="unfilled-slots-items"></ul>
+              </div>
+              <div class="schedule-day-nav" id="scheduleDayNav" style="display:none;">
+                <button type="button" class="day-tab day-tab-all active" data-day="all">All days</button>
+                <button type="button" class="day-tab" data-day="mon">Mon</button>
+                <button type="button" class="day-tab" data-day="tue">Tue</button>
+                <button type="button" class="day-tab" data-day="wed">Wed</button>
+                <button type="button" class="day-tab" data-day="thu">Thu</button>
+                <button type="button" class="day-tab" data-day="fri">Fri</button>
+                <button type="button" class="day-tab" data-day="sat">Sat</button>
+                <button type="button" class="day-tab" data-day="sun">Sun</button>
+              </div>
+              <div class="table-scroll-card">
+                <table class="schedule-result-table schedule-compact-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Station</th>
+                      <th scope="col">Shift · Time</th>
+                      <th scope="col">Assigned crew</th>
+                      <th scope="col">Coverage</th>
+                      <th scope="col">Qualified crew</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resultTableBody"></tbody>
+                </table>
+              </div>
+              <div class="schedule-preview-actions">
+                <button type="button" id="clearDraftAssignmentsButton" class="btn-secondary" onclick="clearDraftAssignments()" disabled>
+                  Clear assignments (0 hrs)
+                </button>
+                <button type="button" id="exportScheduleButton" class="btn-secondary" onclick="exportSchedule()" disabled>
+                  Download Excel
+                </button>
+                <button type="button" id="exportPdfScheduleButton" class="btn-secondary" onclick="exportSchedulePdf()" disabled>
+                  Download PDF
+                </button>
+                <button type="button" id="exportDocxScheduleButton" class="btn-secondary" onclick="exportScheduleDocx()" disabled>
+                  Download Word
+                </button>
+                <button type="button" id="printScheduleButton" class="btn-secondary" onclick="printSchedule()" disabled>
+                  Print
+                </button>
+                <button type="button" id="saveDraftScheduleButton" class="btn-secondary" onclick="saveDraftSchedule()" disabled>
+                  Save draft
+                </button>
+                <button
+                  type="button"
+                  id="publishScheduleButton"
+                  class="btn-primary publish-schedule-button"
+                  onclick="publishSchedule()"
+                  disabled
+                >
+                  Publish schedule
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- HOLIDAYS & PRE-HOLIDAY MIRROR -->
+        <section class="role-section manager-only" id="holidayMirrorSection">
+          <div class="welcome-section dashboard-section-heading">
+            <h2>Holidays &amp; Pre-Holiday Mirror</h2>
+            <p>
+              Configure branch holidays and enable Pre-Holiday Mirror so holiday
+              schedules are seeded from the previous day's assignments.
+            </p>
+          </div>
+          <div class="holiday-mirror-card">
+            <div class="holiday-mirror-toggle">
+              <label class="toggle-label">Pre-Holiday Mirror</label>
+              <div class="toggle-switch" id="preHolidayMirrorToggle" role="switch" aria-checked="false" tabindex="0">
+                <span class="toggle-knob"></span>
+              </div>
+              <span id="preHolidayMirrorStatus" class="toggle-status">OFF</span>
+            </div>
+            <div class="holiday-actions">
+              <button type="button" class="btn-primary" id="addHolidayButton" onclick="openAddHolidayModal()">
+                Add Holiday
+              </button>
+            </div>
+          </div>
+          <div class="holiday-list-section">
+            <h3>Branch Holidays</h3>
+            <div id="holidayList" class="holiday-list">
+              <p class="holiday-list-empty">Loading holidays...</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ADD HOLIDAY MODAL -->
+        <div id="addHolidayModal" class="modal-overlay" style="display: none">
+          <div class="modal-content">
+            <button class="modal-close" onclick="closeAddHolidayModal()">&times;</button>
+            <h2>Add Holiday</h2>
+            <form id="addHolidayForm" class="holiday-form">
+              <div class="form-field">
+                <label for="newHolidayDate">Holiday Date</label>
+                <input type="date" id="newHolidayDate" required />
+              </div>
+              <div class="form-field">
+                <label for="newHolidayName">Holiday Name</label>
+                <input type="text" id="newHolidayName" required placeholder="e.g., Bonifacio Day" />
+              </div>
+              <div class="form-field">
+                <label for="newHolidayType">Holiday Type</label>
+                <select id="newHolidayType" required>
+                  <option value="Regular Holiday">Regular Holiday</option>
+                  <option value="Regular Working">Regular Working</option>
+                  <option value="Special Non-Working">Special Non-Working</option>
+                  <option value="Special Working">Special Working</option>
+                </select>
+              </div>
+              <div class="form-actions">
+                <button type="button" class="btn-secondary" onclick="closeAddHolidayModal()">Cancel</button>
+                <button type="submit" class="btn-primary">Add Holiday</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- MANAGER: STATION ROSTER (Skills Directory) -->
+        <section class="role-section manager-only station-roster-section" id="stationRosterSection">
+          <button type="button" class="station-roster-header" id="stationRosterToggle" aria-expanded="false" aria-controls="stationRosterBodyWrap">
+            <div class="station-roster-heading">
+              <span class="station-roster-chevron" id="stationRosterChevron" aria-hidden="true">▶</span>
+              <div>
+                <h2>Station roster</h2>
+                <p>Listahan ng mga crew na qualified sa bawat station.</p>
+              </div>
+            </div>
+            <span class="station-roster-badge" id="stationRosterCountBadge">0 stations</span>
+          </button>
+
+          <div class="station-roster-collapsible" id="stationRosterBodyWrap" aria-hidden="true">
+            <div class="station-roster-collapsible-inner table-scroll-card">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Station</th>
+                    <th>Qualified Crew</th>
+                    <th>Manage</th>
+                  </tr>
+                </thead>
+                <tbody id="station-roster-body">
+                  <tr>
+                    <td colspan="3">Loading roster...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="scheduleTracking" class="role-section manager-only">
+          <div class="welcome-section dashboard-section-heading">
+            <h2>Schedule tracking</h2>
+            <p>Drafts stay private. Published schedules show which crew have acknowledged them.</p>
+          </div>
+          <div id="scheduleTrackingList" class="schedule-tracking-list" aria-live="polite">
+            <p class="schedule-tracking-empty">Loading schedules...</p>
+          </div>
+        </section>
+
+        <!-- CREW OVERVIEW -->
+        <section class="role-section crew-only" id="crewOverviewSection">
+          <div class="welcome-section">
+            <h2>My overview</h2>
+            <p>Your upcoming shifts and worked hours this pay period.</p>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <h3>Next Shift</h3>
+              <p class="stat-number" id="crewNextShiftDate">--</p>
+              <p id="crewNextShiftStation">No upcoming shift</p>
+              <p id="crewNextShiftTime" style="font-size:11px;color:var(--text-muted);margin:0;"></p>
+            </div>
+            <div class="stat-card">
+              <h3>15-Day Pay Period Hours</h3>
+              <p class="stat-number" id="crewPeriodHours">0 / 80 hrs</p>
+              <p id="crewPeriodStatus" style="font-size:11px;margin:0;"></p>
+              <p id="crewPeriodRange" style="font-size:11px;color:var(--text-muted);margin:0;"></p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="../assets/js/api-config.js"></script>
+    <script src="../assets/js/schedule-notifications.js?v=schedule-ack-1"></script>
+    <script src="../assets/js/dashboard.js?v=schedule-ack-1"></script>
+  </body>
+</html>

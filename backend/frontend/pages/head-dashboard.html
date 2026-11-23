@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Head Manager Assignment</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css" />
+    <link rel="stylesheet" href="../assets/css/head-dashboard.css" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <aside class="sidebar">
+        <div class="logo"><h2>SmartShift</h2></div>
+        <nav class="nav-menu">
+          <a href="head-dashboard.html" class="nav-link active">Manager assignments</a>
+          <a href="change-password.html" class="nav-link">Change password</a>
+        </nav>
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="headName">Loading...</span>
+            <span class="user-role">Head</span>
+          </div>
+          <button class="btn-logout" id="logoutButton" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="top-bar">
+          <div>
+            <p class="page-eyebrow">Head workspace</p>
+            <h1>Manager assignments</h1>
+          </div>
+        </header>
+        <section class="head-panel" aria-label="Manager administration">
+          <div class="page-intro">
+            <div>
+              <h2>Manage your branch managers</h2>
+              <p>
+                Create manager accounts, update their details, or change their
+                branch access. Each manager can view and manage only their
+                assigned branch.
+              </p>
+            </div>
+            <aside class="access-note">
+              <strong>Branch data stays put</strong>
+              Reassignment changes manager access only. Crew, stations, and
+              schedules remain with their original branch.
+            </aside>
+          </div>
+
+          <p id="pageMessage" class="head-message" role="status"></p>
+          <section class="content-card branch-create-section" aria-labelledby="createBranchHeading">
+            <div class="section-heading">
+              <div>
+                <h2 id="createBranchHeading">Add a branch</h2>
+                <p>Create a branch and set its operating hours before assigning managers.</p>
+              </div>
+              <span class="section-tag">Branch setup</span>
+            </div>
+            <form id="createBranchForm" class="branch-create-form">
+              <label>
+                Branch name
+                <input id="branchName" name="name" maxlength="255" required placeholder="e.g. North Branch" />
+              </label>
+              <label>
+                Opens at
+                <input id="branchOpeningTime" name="opening_time" type="time" required value="08:00" />
+              </label>
+              <label>
+                Closes at
+                <input id="branchClosingTime" name="closing_time" type="time" required value="22:00" />
+              </label>
+              <label>
+                Prep time (minutes)
+                <input id="branchPrepMinutes" name="prep_time_minutes" type="number" min="0" max="1440" value="30" required />
+              </label>
+              <label>
+                Closing time (minutes)
+                <input id="branchClosingMinutes" name="closing_time_minutes" type="number" min="0" max="1440" value="30" required />
+              </label>
+              <button type="submit" id="createBranchButton" class="btn-primary">Create branch</button>
+            </form>
+          </section>
+
+          <section class="content-card" aria-labelledby="createManagerHeading">
+            <div class="section-heading">
+              <div>
+                <h2 id="createManagerHeading">Add a manager</h2>
+                <p>Enter the manager’s hiring ID and assign an existing branch.</p>
+              </div>
+              <span class="section-tag">New account</span>
+            </div>
+            <form id="createManagerForm" class="manager-create-form">
+              <label>
+                Full name
+                <input id="managerFullName" name="full_name" required maxlength="255" autocomplete="name" placeholder="e.g. Alex Santos" />
+              </label>
+              <label>
+                Email address
+                <input id="managerEmail" name="email" type="email" required autocomplete="email" placeholder="name@example.com" />
+              </label>
+              <label>
+                Manager ID number
+                <input
+                  id="managerIdNumber"
+                  name="manager_id"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]+"
+                  maxlength="32"
+                  required
+                  autocomplete="off"
+                  placeholder="Hiring-issued ID"
+                />
+              </label>
+              <label>
+                Initial password
+                <input id="managerPassword" name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="At least 8 characters" />
+              </label>
+              <label>
+                Assigned branch
+                <select id="managerBranch" name="branch_id" required>
+                  <option value="">Loading branches...</option>
+                </select>
+              </label>
+              <button type="submit" id="createManagerButton" class="btn-primary">
+                Create manager
+              </button>
+            </form>
+          </section>
+
+          <section class="content-card manager-list-section" aria-labelledby="managerListHeading">
+            <div class="section-heading">
+              <div>
+                <h2 id="managerListHeading">Branch managers</h2>
+                <p>Review assignments and update manager account settings.</p>
+              </div>
+              <span id="managerCount" class="section-tag">Loading...</span>
+            </div>
+            <div id="managerList" aria-live="polite">
+              <div class="empty-state">Loading managers and branches...</div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script src="../assets/js/api-config.js"></script>
+    <script src="../assets/js/head-management.js?v=tab-auth-1"></script>
+  </body>
+</html>

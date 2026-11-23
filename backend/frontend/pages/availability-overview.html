@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SmartShift - Crew Availability</title>
+    <link rel="stylesheet" href="../assets/css/dashboard.css" />
+    <link rel="stylesheet" href="../assets/css/crew-management.css" />
+  </head>
+  <body>
+    <div class="dashboard-container">
+      <aside class="sidebar">
+        <div class="logo"><h2>SmartShift</h2></div>
+        <nav class="nav-menu" aria-label="Main navigation">
+          <a href="dashboard.html" class="nav-link">Overview</a>
+          <a href="stations.html" class="nav-link manager-only">Stations</a>
+          <a href="staffing-requirements.html" class="nav-link manager-only">Staffing requirements</a>
+          <a href="absences.html" class="nav-link">Absences</a>
+          <a href="crew-management.html" class="nav-link manager-only">Crew management</a>
+          <a href="availability-overview.html" class="nav-link active manager-only" aria-current="page">Crew availability</a>
+          <a href="change-password.html" class="nav-link">Change password</a>
+        </nav>
+        <div class="user-profile">
+          <div class="user-info">
+            <span class="user-name" id="userName">Loading...</span>
+            <span class="user-role" id="userRole">Loading...</span>
+          </div>
+          <button class="btn-logout" id="logoutButton" type="button">Logout</button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="top-bar">
+          <div>
+            <p class="page-eyebrow">Crew availability</p>
+            <h1>Crew availability overview</h1>
+          </div>
+          <p class="welcome-message">Welcome, <strong id="topBarName">Loading...</strong></p>
+        </header>
+
+        <section class="page-intro" aria-labelledby="availabilityIntroHeading">
+          <div>
+            <h2 id="availabilityIntroHeading">Crew availability at a glance</h2>
+            <p>Lumabot ang oras na available ng bawat crew bawat araw para sa selected week. Read-only na page; hindi dito ine-edit ang availability.</p>
+          </div>
+          <div class="branch-card" aria-live="polite">
+            <span class="branch-card-label">Your branch</span>
+            <strong id="assignedBranchName">Loading branch...</strong>
+          </div>
+        </section>
+
+        <p id="availMessage" class="crew-message" role="status" aria-live="polite"></p>
+
+        <section class="content-card avail-controls-card" aria-labelledby="availabilityControlsHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="availabilityControlsHeading">Controls</h2>
+              <p>Piliin ang linggo, i-filter ang crew, at piliin ang view.</p>
+            </div>
+          </div>
+
+          <div class="avail-control-row">
+            <div class="field">
+              <label>Week of</label>
+              <input type="date" id="week_start" required />
+            </div>
+            <div class="field">
+              <label>Role</label>
+              <select id="filter_role">
+                <option value="">All roles</option>
+                <option value="Production crew">Production crew</option>
+                <option value="Service crew">Service crew</option>
+                <option value="Crew Trainer">Crew Trainer</option>
+                <option value="Maintenance crew">Maintenance crew</option>
+                <option value="Gel crew">Gel crew</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Employment type</label>
+              <select id="filter_employment">
+                <option value="">All types</option>
+                <option value="Full-time">Full-time</option>
+                <option value="Part-time">Part-time</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Day</label>
+              <select id="filter_day">
+                <option value="">All days</option>
+                <option value="Monday">Monday</option>
+                <option value="Tuesday">Tuesday</option>
+                <option value="Wednesday">Wednesday</option>
+                <option value="Thursday">Thursday</option>
+                <option value="Friday">Friday</option>
+                <option value="Saturday">Saturday</option>
+                <option value="Sunday">Sunday</option>
+              </select>
+            </div>
+            <div class="field field-search">
+              <label>Search name or Employee ID</label>
+              <input type="search" id="search_crew" placeholder="Search..." />
+            </div>
+          </div>
+
+          <div class="avail-view-toggle">
+            <span class="toggle-label">View:</span>
+            <button type="button" class="view-btn active" data-view="grid">Weekly grid</button>
+            <button type="button" class="view-btn" data-view="slot">Per time slot</button>
+          </div>
+        </section>
+
+        <!-- Weekly grid view -->
+        <section class="content-card avail-grid-card" id="viewGrid" aria-labelledby="gridHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="gridHeading">Weekly availability grid</h2>
+              <p>Isa ang row bawat crew; tatlong columna bawat araw.</p>
+            </div>
+            <span id="availCount" class="section-tag">Loading...</span>
+          </div>
+          <div class="table-scroll-card" id="gridWrap">
+            <table class="avail-grid-table">
+              <thead>
+                <tr>
+                  <th scope="col" class="col-sticky">Crew member</th>
+                  <th scope="col">Employee ID</th>
+                  <th scope="col">Employment</th>
+                  <th scope="col">Role</th>
+                  <th scope="col" class="col-day" id="thMonday">Monday</th>
+                  <th scope="col" class="col-day" id="thTuesday">Tuesday</th>
+                  <th scope="col" class="col-day" id="thWednesday">Wednesday</th>
+                  <th scope="col" class="col-day" id="thThursday">Thursday</th>
+                  <th scope="col" class="col-day" id="thFriday">Friday</th>
+                  <th scope="col" class="col-day" id="thSaturday">Saturday</th>
+                  <th scope="col" class="col-day" id="thSunday">Sunday</th>
+                  <th scope="col" class="col-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="availGridBody"></tbody>
+              <tfoot id="availGridFoot"></tfoot>
+            </table>
+          </div>
+        </section>
+
+        <!-- Per time slot view -->
+        <section class="content-card avail-slot-card" id="viewSlot" style="display: none" aria-labelledby="slotHeading">
+          <div class="section-heading">
+            <div>
+              <h2 id="slotHeading">Availability per time slot</h2>
+              <p>Ilang crew ang available bawat shift sa araw na pinili.</p>
+            </div>
+          </div>
+          <div class="field">
+            <label>Choose day</label>
+            <select id="slot_day"></select>
+          </div>
+          <div id="slotSummary" class="slot-summary"></div>
+          <div id="slotBody"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="../assets/js/api-config.js"></script>
+    <script src="../assets/js/availability-overview.js?v=crew-avail-1"></script>
+
+    <!-- Edit availability modal -->
+    <div class="modal" id="availEditModal" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="modal-content" id="availEditModalContent">
+        <button type="button" class="modal-close" id="availEditModalClose" aria-label="Close">×</button>
+        <h2 id="availEditModalTitle">Edit availability</h2>
+        <p id="availEditModalSub" style="margin:0 0 18px;color:var(--text-muted);font-size:12px;"></p>
+
+        <div id="availEditDaysContainer"></div>
+
+        <p id="availEditHint" class="availability-hint" style="margin-top:14px;">
+          Bawat araw ay pwede may higit pa sa isang window. Hindi puwedeng maglapap ang oras ng mga window sa parehong araw.
+        </p>
+
+        <div class="availability-actions" id="availEditActions">
+          <button type="button" class="btn-secondary" id="availEditCancel">Cancel</button>
+          <button type="button" class="btn-primary" id="availEditSave">Save changes</button>
+        </div>
+        <p id="availEditSaveMessage" class="crew-message is-error" style="margin-top:12px;font-size:12px;display:none;"></p>
+      </div>
+    </div>
+
+    <!-- Conflict confirmation overlay -->
+    <div class="modal" id="availConfirmModal" aria-hidden="true" role="dialog" aria-modal="true">
+      <div class="modal-content" style="width:min(600px,92%);">
+        <button type="button" class="modal-close" id="availConfirmClose" aria-label="Close">×</button>
+        <h2 id="availConfirmTitle">Schedule conflict</h2>
+        <p id="availConfirmMessage" style="margin:0 0 12px;color:var(--text-main);font-size:13px;"></p>
+        <div id="availConfirmList" style="max-height:240px;overflow-y:auto;border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;background:#fff;"></div>
+        <div class="modal-actions" style="margin-top:16px;justify-content:flex-end;">
+          <button type="button" class="btn-secondary" id="availConfirmCancel">Cancel</button>
+          <button type="button" class="btn-primary" id="availConfirmSave">I understand, save anyway</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
