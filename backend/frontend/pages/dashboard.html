@@ -100,54 +100,86 @@
             </div>
             <form id="generateScheduleForm" class="schedule-gen-form">
               <div class="schedule-date-field">
-                <label for="gen_week_start">Week start (Monday)</label>
+                <label for="gen_week_start">Petsa simula ng linggo (Lunes)</label>
                 <input type="date" id="gen_week_start" required />
-                <button type="submit" class="btn-primary">Generate schedule</button>
+                <span id="weekRangeDisplay" class="week-range-display"></span>
+                <button type="submit" id="genBtn" class="btn-primary">
+                  <span id="genBtnText">Lagyan ng schedule</span>
+                  <span id="genBtnSpinner" class="spinner" style="display:none;"></span>
+                </button>
               </div>
+              <div id="genError" class="gen-error" style="display:none;"></div>
             </form>
-            <div id="generateResult" class="schedule-result" style="display: none">
-              <div class="schedule-preview-heading">
-                <div>
-                  <p class="page-eyebrow">Schedule preview</p>
-                  <h3>Generated draft schedule</h3>
-                  <p id="schedulePreviewDetails" class="schedule-preview-details"></p>
-                </div>
+
+            <!-- SUMMARY CARDS -->
+            <div id="summaryCards" class="summary-cards" style="display:none;">
+              <div class="summary-card summary-card-coverage">
+                <div class="card-label">Coverage</div>
+                <div class="card-value" id="covValue">-</div>
+                <div class="card-sub" id="covSub">-</div>
               </div>
-              <div id="publishValidationMessage" class="publish-validation-message" role="alert">
-                Crew assignments are generated automatically, then checked for coverage before publishing.
+              <div class="summary-card summary-card-shortage">
+                <div class="card-label">Kulang na crew</div>
+                <div class="card-value" id="shortValue">-</div>
+                <div class="card-sub" id="shortSub">0 slot na kulang</div>
               </div>
-              <div id="scheduleIssuesDetails" class="schedule-issues-details" style="display: none"></div>
+              <div class="summary-card summary-card-avg">
+                <div class="card-label">Average na oras/crew</div>
+                <div class="card-value" id="avgValue">-</div>
+                <div class="card-sub" id="avgSub">Oras bawat isa</div>
+              </div>
+              <div class="summary-card summary-card-spread">
+                <div class="card-label">Spread ng oras (max − min)</div>
+                <div class="card-value" id="spreadValue">-</div>
+                <div class="card-sub" id="spreadSub">Fairness ng oras</div>
+              </div>
+              <div class="summary-card summary-card-overtime">
+                <div class="card-label">Overtime count</div>
+                <div class="card-value" id="otValue">-</div>
+                <div class="card-sub" id="otSub">Oras sa labas ng max</div>
+              </div>
+            </div>
+
+            <!-- TABS -->
+            <div class="schedule-tabs">
+              <button class="tab-btn active" data-tab="schedule">Schedule</button>
+              <button class="tab-btn" data-tab="shortage">Mga Shortage</button>
+              <button class="tab-btn" data-tab="hours">Oras ng Crew</button>
+            </div>
+
+            <!-- TAB: Schedule -->
+            <div id="tabSchedule" class="tab-panel active">
               <div id="understaffedBanner" class="understaffed-banner" style="display: none">
                 <span class="understaffed-icon" aria-hidden="true">⚠️</span>
                 <div class="understaffed-content">
-                  <strong class="understaffed-title">Understaffed slots detected</strong>
-                  <span class="understaffed-count" id="understaffedCount">0 / 0 slots filled</span>
-                  <span class="understaffed-shortage" id="understaffedShortage">0 shortages</span>
+                  <strong class="understaffed-title">May mga slot na kulang pa ang crew</strong>
+                  <span class="understaffed-count" id="understaffedCount">0 / 0 slot na napuno</span>
+                  <span class="understaffed-shortage" id="understaffedShortage">0 kulang</span>
                 </div>
                 <button type="button" class="btn-secondary btn-sm" id="showShortagesToggle" onclick="toggleShowShortages()">
-                  Show shortages only
+                  Magpaka-palagay lamang ng kulang
                 </button>
               </div>
               <div id="unfilledSlotsList" class="unfilled-slots-list" style="display: none">
-                <h4 class="unfilled-slots-heading">Unfilled slots</h4>
+                <h4 class="unfilled-slots-heading">Mga slot na kulang</h4>
                 <ul id="unfilledSlotsItems" class="unfilled-slots-items"></ul>
               </div>
               <div class="schedule-day-nav" id="scheduleDayNav" style="display:none;">
-                <button type="button" class="day-tab day-tab-all active" data-day="all">All days</button>
-                <button type="button" class="day-tab" data-day="mon">Mon</button>
-                <button type="button" class="day-tab" data-day="tue">Tue</button>
-                <button type="button" class="day-tab" data-day="wed">Wed</button>
-                <button type="button" class="day-tab" data-day="thu">Thu</button>
-                <button type="button" class="day-tab" data-day="fri">Fri</button>
-                <button type="button" class="day-tab" data-day="sat">Sat</button>
-                <button type="button" class="day-tab" data-day="sun">Sun</button>
+                <button type="button" class="day-tab day-tab-all active" data-day="all">Lahat ng araw</button>
+                <button type="button" class="day-tab" data-day="mon">Lunes</button>
+                <button type="button" class="day-tab" data-day="tue">Martes</button>
+                <button type="button" class="day-tab" data-day="wed">Miyerkules</button>
+                <button type="button" class="day-tab" data-day="thu">Huwebes</button>
+                <button type="button" class="day-tab" data-day="fri">Biyernes</button>
+                <button type="button" class="day-tab" data-day="sat">Sabado</button>
+                <button type="button" class="day-tab" data-day="sun">Linggo</button>
               </div>
               <div class="table-scroll-card">
                 <table class="schedule-result-table schedule-compact-table">
                   <thead>
                     <tr>
                       <th scope="col">Station</th>
-                      <th scope="col">Shift · Time</th>
+                      <th scope="col">Shift · Oras</th>
                       <th scope="col">Assigned crew</th>
                       <th scope="col">Coverage</th>
                       <th scope="col">Qualified crew</th>
@@ -156,35 +188,73 @@
                   <tbody id="resultTableBody"></tbody>
                 </table>
               </div>
-              <div class="schedule-preview-actions">
-                <button type="button" id="clearDraftAssignmentsButton" class="btn-secondary" onclick="clearDraftAssignments()" disabled>
-                  Clear assignments (0 hrs)
-                </button>
-                <button type="button" id="exportScheduleButton" class="btn-secondary" onclick="exportSchedule()" disabled>
-                  Download Excel
-                </button>
-                <button type="button" id="exportPdfScheduleButton" class="btn-secondary" onclick="exportSchedulePdf()" disabled>
-                  Download PDF
-                </button>
-                <button type="button" id="exportDocxScheduleButton" class="btn-secondary" onclick="exportScheduleDocx()" disabled>
-                  Download Word
-                </button>
-                <button type="button" id="printScheduleButton" class="btn-secondary" onclick="printSchedule()" disabled>
-                  Print
-                </button>
-                <button type="button" id="saveDraftScheduleButton" class="btn-secondary" onclick="saveDraftSchedule()" disabled>
-                  Save draft
-                </button>
-                <button
-                  type="button"
-                  id="publishScheduleButton"
-                  class="btn-primary publish-schedule-button"
-                  onclick="publishSchedule()"
-                  disabled
-                >
-                  Publish schedule
-                </button>
+            </div>
+
+            <!-- TAB: Mga Shortage -->
+            <div id="tabShortage" class="tab-panel">
+              <div class="shortage-table-wrap table-scroll-card">
+                <table class="schedule-result-table schedule-compact-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Araw</th>
+                      <th scope="col">Station</th>
+                      <th scope="col">Shift</th>
+                      <th scope="col">Kinakailangan</th>
+                      <th scope="col">Napuno</th>
+                      <th scope="col">Kulang</th>
+                      <th scope="col">Dahilan</th>
+                    </tr>
+                  </thead>
+                  <tbody id="shortageTableBody"></tbody>
+                </table>
               </div>
+            </div>
+
+            <!-- TAB: Oras ng Crew -->
+            <div id="tabHours" class="tab-panel">
+              <div class="hours-table-wrap table-scroll-card">
+                <table class="schedule-result-table schedule-compact-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Crew</th>
+                      <th scope="col">Total na oras</th>
+                      <th scope="col">Max oras</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hoursTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="schedule-preview-actions">
+              <button type="button" id="clearDraftAssignmentsButton" class="btn-secondary" onclick="clearDraftAssignments()" disabled>
+                Burahin ang mga assignment (0 oras)
+              </button>
+              <button type="button" id="exportScheduleButton" class="btn-secondary" onclick="exportSchedule()" disabled>
+                Download Excel
+              </button>
+              <button type="button" id="exportPdfScheduleButton" class="btn-secondary" onclick="exportSchedulePdf()" disabled>
+                Download PDF
+              </button>
+              <button type="button" id="exportDocxScheduleButton" class="btn-secondary" onclick="exportScheduleDocx()" disabled>
+                Download Word
+              </button>
+              <button type="button" id="printScheduleButton" class="btn-secondary" onclick="printSchedule()" disabled>
+                Print
+              </button>
+              <button type="button" id="saveDraftScheduleButton" class="btn-secondary" onclick="saveDraftSchedule()" disabled>
+                Save draft
+              </button>
+              <button
+                type="button"
+                id="publishScheduleButton"
+                class="btn-primary publish-schedule-button"
+                onclick="publishSchedule()"
+                disabled
+              >
+                Publish schedule
+              </button>
             </div>
           </div>
         </section>

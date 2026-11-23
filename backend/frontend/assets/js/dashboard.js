@@ -110,14 +110,21 @@ document.getElementById("generateScheduleForm").addEventListener("submit", async
         return;
     }
 
+    // Show loading state
+    const genBtn = document.getElementById("genBtn");
+    const genBtnText = document.getElementById("genBtnText");
+    const genBtnSpinner = document.getElementById("genBtnSpinner");
     const resultDiv = document.getElementById("generateResult");
     const resultBody = document.getElementById("resultTableBody");
-    const generateButton = document.querySelector("#generateScheduleForm button[type='submit']");
+    const summaryCards = document.getElementById("summaryCards");
+    const genError = document.getElementById("genError");
 
-    resultDiv.style.display = "block";
-    resultBody.innerHTML = "<tr><td colspan='5' class='schedule-empty-cell'>Generating schedule... Please wait.</td></tr>";
-    generateButton.disabled = true;
-    resultDiv.scrollIntoView({ behavior: "smooth", block: "start" });
+    genBtn.disabled = true;
+    genBtnText.textContent = "Gumagawa ng schedule...";
+    genBtnSpinner.style.display = "inline-block";
+    resultDiv.style.display = "none";
+    summaryCards.style.display = "none";
+    genError.style.display = "none";
 
     try {
         const response = await fetch(`${API_URL}/schedules/generate-full-week?schedule_date=${date}`, {
@@ -127,9 +134,11 @@ document.getElementById("generateScheduleForm").addEventListener("submit", async
         const data = await response.json();
 
         if (response.ok) {
-            resultBody.innerHTML = "";
-
             if (!Array.isArray(data) || data.length === 0) {
+                genBtn.disabled = false;
+                genBtnText.textContent = "Lagyan ng schedule";
+                genBtnSpinner.style.display = "none";
+                resultDiv.style.display = "block";
                 resultBody.innerHTML = "<tr><td colspan='5' class='schedule-empty-cell'>Walang nahanap na schedule.</td></tr>";
                 return;
             }
@@ -139,33 +148,47 @@ document.getElementById("generateScheduleForm").addEventListener("submit", async
             selectedDayFilter = "all";
             document.getElementById("gen_week_start").disabled = true;
             document.getElementById("clearDraftAssignmentsButton").disabled = false;
-            renderSchedulePreview(data);
-            await fetchCrewPeriodHours();
-            await validateDraftSchedule();
 
+            // Hide error, show result
+            resultDiv.style.display = "block";
+            resultBody.innerHTML = "";
+
+            // Fetch solver metrics + shortage summary
+            try {
+                const sumRes = await fetch(`${API_URL}/schedules/shortage-summary?schedule_date=${date}`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                if (sumRes.ok) {
+                    const sumData = await sumRes.json();
+                    renderSummaryCards(sumData);
+                    renderShortageTab(sumData);
+                    renderHoursTab(sumData);
+                }
+            } catch (err) {
+                console.error("Shortage summary fetch failed:", err);
+            }
+
+            // Render schedule tab
+            renderSchedulePreview(data);
+
+            genBtn.disabled = false;
+            genBtnText.textContent = "Lagyan ng schedule";
+            genBtnSpinner.style.display = "none";
         } else {
-            resultBody.textContent = "";
-            const errorRow = document.createElement("tr");
-            const errorCell = document.createElement("td");
-            errorCell.colSpan = 5;
-            errorCell.className = "schedule-empty-cell is-error";
-            errorCell.textContent = `Error: ${formatApiError(data.detail, "Failed to generate")}`;
-            errorRow.append(errorCell);
-            resultBody.append(errorRow);
+            genBtn.disabled = false;
+            genBtnText.textContent = "Lagyan ng schedule";
+            genBtnSpinner.style.display = "none";
+            genError.textContent = data.detail || "Nagkamang mag-generate ng schedule.";
+            genError.style.display = "block";
+            resultDiv.style.display = "none";
         }
-    } catch (error) {
-        resultBody.textContent = "";
-        const errorRow = document.createElement("tr");
-        const errorCell = document.createElement("td");
-        errorCell.colSpan = 5;
-        errorCell.className = "schedule-empty-cell is-error";
-        errorCell.textContent = `Error: ${error.message}`;
-        errorRow.append(errorCell);
-        resultBody.append(errorRow);
-    } finally {
-        generateButton.disabled = false;
-        document.getElementById("gen_week_start").disabled =
-            currentWeekSchedule.length > 0;
+    } catch (err) {
+        genBtn.disabled = false;
+        genBtnText.textContent = "Lagyan ng schedule";
+        genBtnSpinner.style.display = "none";
+        genError.textContent = "Hindi makonekta sa server. Isubok muli.";
+        genError.style.display = "block";
+        resultDiv.style.display = "none";
     }
 });
 
@@ -757,7 +780,158 @@ function renderSchedulePreview(weekSchedule) {
     }
 }
 
-// Event delegation for "Choose crew" buttons
+// ---- Summary cards ----
+function renderSummaryCards(sumData) {
+    const cards = document.getElementById("summaryCards");
+    if (!cards) return;
+    cards.style.display = "grid";
+
+    // Coverage %
+    const covValue = document.getElementById("covValue");
+    const covSub = document.getElementById("covSub");
+    if (covValue) {
+        covValue.textContent = `${sumData.coverage_pct}%`;
+        covSub.textContent = `${sumData.total_assigned} / ${sumData.total_required} slot`;
+        const card = document.querySelector(".summary-card-coverage");
+        if (card) {
+            card.className = "summary-card summary-card-coverage";
+            if (sumData.coverage_pct >= 90) card.classList.add("status-ok");
+            else if (sumData.coverage_pct >= 70) card.classList.add("status-warn");
+            else card.classList.add("status-red");
+        }
+    }
+
+    // Shortages
+    const shortValue = document.getElementById("shortValue");
+    const shortSub = document.getElementById("shortSub");
+    if (shortValue) {
+        shortValue.textContent = sumData.total_missing;
+        shortSub.textContent = `${sumData.total_missing} slot na kulang`;
+    }
+
+    // Average hours
+    const avgValue = document.getElementById("avgValue");
+    const avgSub = document.getElementById("avgSub");
+    if (avgValue) {
+        avgValue.textContent = `${sumData.average_hours} h`;
+        avgSub.textContent = `Bawat crew`;
+    }
+
+    // Hours spread
+    const spreadValue = document.getElementById("spreadValue");
+    const spreadSub = document.getElementById("spreadSub");
+    if (spreadValue) {
+        spreadValue.textContent = `${sumData.hours_spread} h`;
+        spreadSub.textContent = `Max − min`;
+    }
+
+    // Overtime
+    const otValue = document.getElementById("otValue");
+    const otSub = document.getElementById("otSub");
+    if (otValue) {
+        otValue.textContent = sumData.overtime_count;
+        otSub.textContent = `Naka-exceed sa max`;
+    }
+}
+
+// ---- Mga Shortage tab ----
+function renderShortageTab(sumData) {
+    const tbody = document.getElementById("shortageTableBody");
+    if (!tbody) return;
+    tbody.replaceChildren();
+
+    const rows = [];
+    for (const [dayKey, dayEntry] of Object.entries(sumData.by_day)) {
+        const dayDate = new Date(`${dayKey}T00:00:00`);
+        const dayName = dayDate.toLocaleDateString(undefined, { weekday: "short" });
+        for (const [station, count] of Object.entries(dayEntry.by_station || {})) {
+            // Find the shift(s) missing for this station on this day
+            const shifts = Object.entries(dayEntry.by_shift || {});
+            // Approximate: spread missing across shifts
+            const shiftName = shifts.length ? shifts[0][0] : "-";
+            rows.push({ day: dayName, date: dayKey, station, shift: shiftName, missing: count });
+        }
+    }
+
+    if (rows.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='7' class='schedule-empty-cell'>Walang kulang na slot.</td></tr>";
+        return;
+    }
+
+    rows.forEach(r => {
+        const tr = document.createElement("tr");
+        const dayLabel = r.day;
+        tr.innerHTML = `
+            <td>${dayLabel} · ${new Date(`${r.date}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</td>
+            <td>${r.station}</td>
+            <td>${r.shift}</td>
+            <td>-</td>
+            <td>0</td>
+            <td style="font-weight:700;color:#b91c1c;">${r.missing}</td>
+            <td>Kulang na available crew</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// ---- Oras ng Crew tab ----
+function renderHoursTab(sumData) {
+    const tbody = document.getElementById("hoursTableBody");
+    if (!tbody) return;
+    tbody.replaceChildren();
+
+    const empHours = sumData.employee_hours || {};
+    const rows = Object.entries(empHours).map(([eid, hours]) => ({ eid, hours }));
+
+    if (rows.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='4' class='schedule-empty-cell'>Walang crew na may oras.</td></tr>";
+        return;
+    }
+
+    rows.forEach(({ eid, hours }) => {
+        const maxHours = 80; // default
+        const tr = document.createElement("tr");
+        const statusClass = hours > maxHours ? "status-red" : hours < maxHours * 0.8 ? "status-warn" : "status-ok";
+        const statusText = hours > maxHours ? "Over max" : hours < maxHours * 0.8 ? "Below min target" : "OK";
+        tr.innerHTML = `
+            <td>Crew #${eid}</td>
+            <td>${hours} h</td>
+            <td>${maxHours} h</td>
+            <td><span class="status-pill ${statusClass}">${statusText}</span></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// ---- Tab switching ----
+document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(`tab${btn.dataset.tab}`).classList.add("active");
+    });
+});
+
+// ---- Show shortages only toggle ----
+window.toggleShowShortages = function() {
+    const list = document.getElementById("unfilledSlotsList");
+    if (list) list.style.display = list.style.display === "none" ? "block" : "none";
+};
+
+// ---- Week picker: only allow Mondays ----
+const dateInput = document.getElementById("gen_week_start");
+if (dateInput) {
+    // Disable all dates except Mondays
+    dateInput.addEventListener("input", () => {
+        const d = new Date(dateInput.value);
+        const day = d.getDay(); // 0=Sun, 1=Mon
+        if (day !== 1) {
+            dateInput.value = "";
+            alert("Piliin lamang ang Lunes bilang simula ng linggo.");
+        }
+    });
+}
 document.getElementById("resultTableBody").addEventListener("click", (event) => {
     const btn = event.target.closest(".crew-pick-btn");
     if (!btn || btn.disabled) return;
