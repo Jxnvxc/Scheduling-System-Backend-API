@@ -4,10 +4,12 @@ from typing import List
 from datetime import date, datetime, time, timedelta, timezone
 from pydantic import BaseModel, ConfigDict, Field
 import time
+import uuid
+import threading
 
 from app.auth.branch_access import require_manager_branch_id
 from app.auth.dependencies import get_current_user
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.models.schedule import Schedule
 from app.models.branch import Branch
 from app.models.assignment import ShiftAssignment
@@ -36,6 +38,85 @@ from app.services.scheduling import (
     period_bounds,
 )
 from app.services.station_shifts import StationShift, effective_station_shifts
+
+# ---- Background job storage (in-memory, fine for thesis demo) ----
+# Limits: lost on server restart, not shared across workers, no persistence.
+_generation_jobs: dict[str, dict] = {}
+_generation_jobs_lock = threading.Lock()
+
+
+def _new_job() -> str:
+    job_id = str(uuid.uuid4())
+    with _generation_jobs_lock:
+        _generation_jobs[job_id] = {
+            "status": "queued",
+            "created_at": time.perf_counter(),
+            "started_at": None,
+            "finished_at": None,
+            "elapsed_seconds": None,
+            "result": None,
+            "error": None,
+        }
+    return job_id
+
+
+def _get_job(job_id: str) -> dict | None:
+    with _generation_jobs_lock:
+        return _generation_jobs.get(job_id)
+
+
+def _set_job(job_id: str, **fields):
+    with _generation_jobs_lock:
+        job = _generation_jobs.get(job_id)
+        if job:
+            job.update(fields)
+
+
+def _run_generation_in_background(
+    job_id: str,
+    schedule_date: date,
+    branch_id: int,
+    db_session_factory,
+    current_user_id: int,
+):
+    """Run generate_full_week in a background thread."""
+    _set_job(job_id, status="running", started_at=time.perf_counter())
+    try:
+        db = db_session_factory()
+        try:
+            current_user = db.query(User).filter(User.id == current_user_id).first()
+            if not current_user:
+                raise ValueError("User not found")
+
+            result = generate_full_week(
+                schedule_date=schedule_date,
+                db=db,
+                current_user=current_user,
+            )
+            _set_job(
+                job_id,
+                status="done",
+                finished_at=time.perf_counter(),
+                result=result,
+            )
+        except Exception as e:
+            _set_job(
+                job_id,
+                status="failed",
+                finished_at=time.perf_counter(),
+                error=str(e),
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        _set_job(
+            job_id,
+            status="failed",
+            finished_at=time.perf_counter(),
+            error=str(e),
+        )
+
+
 router = APIRouter(prefix="/schedules", tags=["Schedules"])
 
 
@@ -1261,218 +1342,68 @@ def generate_full_day(
 
 
 @router.post("/generate-full-week")
+@router.post("/generate-full-week")
 def generate_full_week(
     schedule_date: date,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    t0 = time.perf_counter()
+    """Start schedule generation as a background job. Returns job_id immediately."""
     branch_id = require_manager_branch_id(current_user)
+    job_id = _new_job()
 
-    stations = db.query(Station).filter(Station.branch_id == branch_id).all()
-    station_by_id = {station.id: station for station in stations}
-
-    employees = db.query(User).filter(
-        User.branch_id == branch_id,
-        User.role == UserRole.EMPLOYEE,
-        User.is_active.is_(True)
-    ).all()
-    employee_ids = [employee.id for employee in employees]
-
-    week_start, week_end = week_bounds(schedule_date)
-    period_start, period_end = period_bounds(schedule_date)
-    existing_assignments = db.query(ShiftAssignment).filter(
-        ShiftAssignment.branch_id == branch_id,
-        ShiftAssignment.status == "Published",
-        ShiftAssignment.schedule_date >= week_start - timedelta(days=1),
-        ShiftAssignment.schedule_date <= week_end + timedelta(days=1),
-    ).all()
-
-    employees_by_id = {emp.id: emp for emp in employees}
-
-    requirements = db.query(StaffingRequirement).filter(
-        StaffingRequirement.branch_id == branch_id,
-    ).all()
-    station_shifts = effective_station_shifts(stations, requirements)
-    shifts_by_station = {}
-    required_counts = {}
-    for shift in station_shifts:
-        shifts_by_station.setdefault(shift.station_id, []).append(shift)
-        required_counts[(shift.station_id, shift.name)] = shift.required_count
-
-    scheduled_hours = {}
-    for assignment in existing_assignments:
-        if period_start <= assignment.schedule_date <= period_end:
-            station = station_by_id.get(assignment.station_id)
-            scheduled_hours[assignment.user_id] = (
-                scheduled_hours.get(assignment.user_id, 0)
-                + shift_hours(
-                    assignment.shift_name,
-                    station=station,
-                    start_time=assignment.start_time,
-                    end_time=assignment.end_time,
-                )
-            )
-
-    scheduled_for_rest = list(existing_assignments)
-
-    pre_holiday_mirror_enabled = _get_pre_holiday_mirror_setting(db, branch_id)
-
-    # ---- LOAD ALL DAY-LEVEL DATA ONCE (fix N+1) ----
-    t_load0 = time.perf_counter()
-    all_availability = db.query(Availability).filter(
-        Availability.user_id.in_(employee_ids),
-        Availability.valid_from <= week_end,
-        Availability.valid_to >= week_start,
-    ).all() if employee_ids else []
-    all_leaves = db.query(CrewRequest.requester_id).filter(
-        CrewRequest.branch_id == branch_id,
-        CrewRequest.request_type == "leave",
-        CrewRequest.status == "approved",
-        CrewRequest.requester_id.in_(employee_ids),
-        CrewRequest.start_date <= week_end,
-        CrewRequest.end_date >= week_start,
-    ).all() if employee_ids else []
-    all_absences = db.query(Absence.employee_id).filter(
-        Absence.branch_id == branch_id,
-        Absence.status == AbsenceStatus.APPROVED,
-        Absence.employee_id.in_(employee_ids),
-        Absence.absence_date >= week_start.isoformat(),
-        Absence.absence_date <= week_end.isoformat(),
-    ).all() if employee_ids else []
-    t_load1 = time.perf_counter()
-
-    # Index availability by (user_id, day_name)
-    avail_by_user_day: dict[tuple[int, str], list] = {}
-    for a in all_availability:
-        day_name = a.day_of_week
-        avail_by_user_day.setdefault((a.user_id, day_name), []).append(a)
-
-    # Index leaves and absences by date
-    leave_by_date: dict[date, set[int]] = {}
-    for r in all_leaves:
-        start_d = r.start_date
-        end_d = r.end_date
-        cur = start_d
-        while cur <= end_d:
-            leave_by_date.setdefault(cur, set()).add(r.requester_id)
-            cur = cur + timedelta(days=1)
-
-    absence_by_date: dict[date, set[int]] = {}
-    for r in all_absences:
-        d = date.fromisoformat(r.absence_date) if isinstance(r.absence_date, str) else r.absence_date
-        absence_by_date.setdefault(d, set()).add(r.employee_id)
-
-    t0 = time.perf_counter()  # reset t0 after data load for accurate solve timing
-
-    results = []
-    for offset in range(7):
-        day_date = week_start + timedelta(days=offset)
-        day_name = day_date.strftime("%A")
-        holiday_info = None
-        previous_day_assignments = None
-        if pre_holiday_mirror_enabled:
-            holiday = _get_holiday_for_date(db, branch_id, day_date)
-            if holiday:
-                holiday_info = {
-                    "name": holiday.name,
-                    "holiday_type": holiday.holiday_type,
-                }
-                previous_date = day_date - timedelta(days=1)
-                previous_day_assignments = _get_previous_day_assignments(
-                    db, branch_id, previous_date
-                )
-
-        # Build per-day unavailable set from pre-loaded data
-        unavailable_employee_ids = (
-            leave_by_date.get(day_date, set()) | absence_by_date.get(day_date, set())
-        )
-
-        results.append(
-            _generate_single_day(
-                schedule_date=day_date,
-                branch_id=branch_id,
-                db=db,
-                employees=employees,
-                stations=stations,
-                station_by_id=station_by_id,
-                day_name=day_name,
-                employee_ids=employee_ids,
-                existing_assignments=[
-                    assignment
-                    for assignment in existing_assignments
-                    if assignment.schedule_date != day_date
-                ],
-                week_start=week_start,
-                week_end=week_end,
-                shifts_by_station=shifts_by_station,
-                required_counts=required_counts,
-                scheduled_hours=scheduled_hours,
-                scheduled_for_rest=scheduled_for_rest,
-                pre_holiday_mirror_enabled=pre_holiday_mirror_enabled,
-                holiday_info=holiday_info,
-                previous_day_assignments=previous_day_assignments,
-                unavailable_employee_ids=unavailable_employee_ids,
-                availabilities_by_user_day=avail_by_user_day,
-            )
-        )
-
-    # Compute solver metrics across the whole week
-    total_required = sum(d["total_required"] for d in results)
-    total_assigned = sum(d["total_assigned"] for d in results)
-    total_missing = sum(d["total_missing"] for d in results)
-    coverage_pct = round((total_assigned / total_required) * 100, 1) if total_required else 100.0
-
-    # Per-employee hours
-    employee_hours: dict[int, float] = {}
-    for day in results:
-        for slot in day["schedule"]:
-            for assigned in slot["assigned"]:
-                eid = assigned["id"]
-                employee_hours[eid] = employee_hours.get(eid, 0) + slot_hours(
-                    slot["shift"],
-                    station=station_by_id.get(slot["station_id"]),
-                )
-
-    hours_values = list(employee_hours.values())
-    avg_hours = round(sum(hours_values) / len(hours_values), 1) if hours_values else 0.0
-    hours_spread = round(max(hours_values) - min(hours_values), 1) if hours_values else 0.0
-    overtime_count = sum(
-        1 for eid, h in employee_hours.items()
-        if (employees_by_id.get(eid).max_hours if employees_by_id.get(eid) else 80) < h
+    thread = threading.Thread(
+        target=_run_generation_in_background,
+        args=(job_id, schedule_date, branch_id, SessionLocal, current_user.id),
+        daemon=True,
     )
+    thread.start()
 
-    # Shortage summary grouped by day, shift, station
-    shortage_summary: dict[str, dict] = {}
-    for day in results:
-        day_key = str(day["date"])
-        day_summary = shortage_summary.setdefault(day_key, {"total": 0, "by_shift": {}, "by_station": {}})
-        day_summary["total"] += day["total_missing"]
-        for u in day["unfilled"]:
-            shift_key = u["shift"]
-            station_key = u["station"]
-            day_summary["by_shift"][shift_key] = day_summary["by_shift"].get(shift_key, 0) + u["missing"]
-            day_summary["by_station"][station_key] = day_summary["by_station"].get(station_key, 0) + u["missing"]
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Schedule generation started. Poll /schedules/generate-status/{job_id}.",
+    }
 
-    # Add solver metrics to each day's result
-    for day in results:
-        day["solver_metrics"] = {
-            "coverage_pct": coverage_pct,
-            "total_required": total_required,
-            "total_assigned": total_assigned,
-            "total_missing": total_missing,
-            "average_hours": avg_hours,
-            "hours_spread": hours_spread,
-            "overtime_count": overtime_count,
-            "solver_status": "FEASIBLE" if total_missing == 0 else "PARTIAL",
-            "shortage_summary": shortage_summary,
-        }
 
-    t_end = time.perf_counter()
-    print(f"[TIMING] generate_full_week: total={t_end - t_load1:.2f}s, "
-          f"slots={total_required}, assigned={total_assigned}, missing={total_missing}")
+@router.get("/generate-status/{job_id}")
+def generate_status(job_id: str):
+    """Check status of a background schedule generation job."""
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
 
-    return results
+    response = {
+        "job_id": job_id,
+        "status": job["status"],
+        "elapsed_seconds": None,
+    }
+
+    if job["started_at"]:
+        response["elapsed_seconds"] = round(
+            (job["finished_at"] or time.perf_counter()) - job["started_at"], 2
+        )
+
+    if job["status"] == "done":
+        response["result"] = job["result"]
+    elif job["status"] == "failed":
+        response["error"] = job["error"]
+
+    return response
+
+
+@router.post("/generate-cancel/{job_id}")
+def generate_cancel(job_id: str):
+    """Cancel a background schedule generation job (best-effort)."""
+    job = _get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job["status"] in ("done", "failed"):
+        return {"job_id": job_id, "status": job["status"], "message": "Job already finished"}
+
+    _set_job(job_id, status="cancelled", finished_at=time.perf_counter())
+    return {"job_id": job_id, "status": "cancelled", "message": "Job marked for cancellation"}
 
 @router.post("/publish")
 def publish_schedule(
