@@ -42,19 +42,21 @@ function showMessage(text, type = "error") {
 }
 
 function formatApiError(detail, fallback) {
+    if (detail == null) return fallback;
     if (typeof detail === "string" && detail.trim()) return detail;
     if (Array.isArray(detail)) {
-        const messages = detail.map(item => {
-            if (typeof item === "string") return item;
-            if (!item || typeof item !== "object") return "";
-            const location = Array.isArray(item.loc)
-                ? item.loc.filter(part => part !== "body").join(" > ")
-                : "";
-            return [location, item.msg].filter(Boolean).join(": ");
-        }).filter(Boolean);
+        const messages = detail
+            .filter(item => item && typeof item === "object")
+            .map(item => {
+                const location = Array.isArray(item.loc)
+                    ? item.loc.filter(part => part !== "body").join(" > ")
+                    : "";
+                return [location, item.msg].filter(Boolean).join(": ");
+            })
+            .filter(Boolean);
         if (messages.length) return messages.join("; ");
     }
-    if (detail && typeof detail === "object") {
+    if (typeof detail === "object") {
         if (typeof detail.message === "string") return detail.message;
         if (typeof detail.detail === "string") return detail.detail;
     }
@@ -92,6 +94,14 @@ async function requestJson(path, options = {}) {
         throw new Error(formatApiError(data && data.detail, "Unable to save staffing requirements."));
     }
     return data;
+}
+
+// Normalize HH:MM (from <input type="time">) to HH:MM:SS for Pydantic time fields.
+function normalizeTime(value) {
+    if (!value) return value;
+    const parts = String(value).split(":");
+    if (parts.length === 2) return `${parts[0]}:${parts[1]}:00`;
+    return value;
 }
 
 function renderRequirements(requirements, stationPriorities) {
@@ -545,14 +555,18 @@ function readRequirementRows() {
     return Array.from(
         tableBody.querySelectorAll("tr[data-station-id][data-shift-type]"),
         row => {
+            const startInput = row.querySelector('input[type="time"]');
+            const endInput = row.querySelectorAll('input[type="time"]')[1];
+            const countInputs = row.querySelectorAll('input[type="number"]');
+            const enabledInput = row.querySelector(".shift-enabled-input");
             return {
                 station_id: Number(row.dataset.stationId),
                 shift_type: row.dataset.shiftType,
-                start_time: row.querySelector('input[type="time"]').value,
-                end_time: row.querySelectorAll('input[type="time"]')[1].value,
-                required_count: row.querySelectorAll('input[type="number"]')[0].value,
-                minimum_crew: row.querySelectorAll('input[type="number"]')[1].value,
-                enabled: row.querySelector(".shift-enabled-input").checked,
+                start_time: normalizeTime(startInput ? startInput.value : ""),
+                end_time: normalizeTime(endInput ? endInput.value : ""),
+                required_count: Number(countInputs[0] ? countInputs[0].value : 1),
+                minimum_crew: Number(countInputs[1] ? countInputs[1].value : countInputs[0] ? countInputs[0].value : 1),
+                enabled: enabledInput ? enabledInput.checked : true,
             };
         },
     );
@@ -587,13 +601,49 @@ form.addEventListener("submit", async event => {
 
     const requirements = readRequirementRows();
     let minCrewError = null;
+    let timeError = null;
+    let countError = null;
+    const stationNames = new Map();
+    for (const row of tableBody.querySelectorAll("tr.staffing-station-row.compact")) {
+        const nameEl = row.querySelector(".station-compact-name");
+        stationNames.set(
+            Number(row.dataset.stationId),
+            nameEl ? nameEl.textContent.trim() : `Station ${row.dataset.stationId}`,
+        );
+    }
     requirements.forEach(requirement => {
         requirement.required_count = Number(requirement.required_count);
         requirement.minimum_crew = requirement.minimum_crew != null ? Number(requirement.minimum_crew) : requirement.required_count;
+        const name = stationNames.get(requirement.station_id) || `Station ${requirement.station_id}`;
+
+        // End time must be later than start time
+        const startParts = requirement.start_time.split(":").map(Number);
+        const endParts = requirement.end_time.split(":").map(Number);
+        const startMinutes = startParts[0] * 60 + startParts[1];
+        const endMinutes = endParts[0] * 60 + endParts[1];
+        if (endMinutes <= startMinutes && !timeError) {
+            timeError = `${name} ${requirement.shift_type}: ang oras tapos ay dapat mas huli kaysa sa oras simula.`;
+        }
+
+        // Required crew between 0 and 100
+        if (requirement.required_count < 0 || requirement.required_count > 100 && !countError) {
+            countError = `${name} ${requirement.shift_type}: ang required crew ay dapat nasa 0 hanggang 100.`;
+        }
+
         if (requirement.minimum_crew > requirement.required_count && !minCrewError) {
-            minCrewError = `${requirement.shift_type}: minimum crew cannot be greater than required crew.`;
+            minCrewError = `${name} ${requirement.shift_type}: minimum crew cannot be greater than required crew.`;
         }
     });
+    if (timeError) {
+        showMessage(timeError, "error");
+        saveButton.disabled = false;
+        return;
+    }
+    if (countError) {
+        showMessage(countError, "error");
+        saveButton.disabled = false;
+        return;
+    }
     if (minCrewError) {
         showMessage(minCrewError, "error");
         saveButton.disabled = false;
@@ -610,14 +660,6 @@ form.addEventListener("submit", async event => {
             list.push(req.shift_type);
             enabledByStation.set(req.station_id, list);
         }
-    }
-    const stationNames = new Map();
-    for (const row of tableBody.querySelectorAll("tr.staffing-station-row.compact")) {
-        const nameEl = row.querySelector(".station-compact-name");
-        stationNames.set(
-            Number(row.dataset.stationId),
-            nameEl ? nameEl.textContent.trim() : `Station ${row.dataset.stationId}`,
-        );
     }
     for (const stationId of allStationIds) {
         const enabledShifts = enabledByStation.get(stationId) || [];
