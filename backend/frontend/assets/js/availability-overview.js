@@ -1,5 +1,8 @@
 const API_URL = window.SMARTSHIFT_API_URL;
 const token = sessionStorage.getItem("access_token");
+const user = sessionStorage.getItem("user")
+    ? JSON.parse(sessionStorage.getItem("user"))
+    : null;
 
 const availMessage = document.getElementById("availMessage");
 const availCount = document.getElementById("availCount");
@@ -26,7 +29,6 @@ const SHIFTS = [
 ];
 
 let overviewData = null;
-let user = null;
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, character => ({
