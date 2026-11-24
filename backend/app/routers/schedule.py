@@ -1582,3 +1582,392 @@ def shortage_summary(
         "unfilled_items": unfilled_items,
         "employee_hours": {str(eid): h for eid, h in employee_hours.items()},
     }
+
+
+# ============================================================================
+# Single-Day Schedule Generator (per PROSESO specification)
+# ============================================================================
+
+class SingleDayRequest(BaseModel):
+    target_date: date
+    shift_name: str  # "Opening", "Mid", "Closing"
+
+
+class AssignmentOut(BaseModel):
+    employee_id: int
+    name: str
+    department: str
+    station: str
+
+
+class UnfilledOut(BaseModel):
+    station: str
+    reason: str
+
+
+class SingleDayResponse(BaseModel):
+    date: str
+    shift: str
+    assignments: List[AssignmentOut]
+    unfilled_slots: List[UnfilledOut]
+    notes: List[str]
+
+
+def _department_from_crew_type(crew_type: str | None) -> str:
+    """Map crew_type string to department: SERVICE or PRODUCTION."""
+    if not crew_type:
+        return "SERVICE"
+    ct = crew_type.lower()
+    if "production" in ct:
+        return "PRODUCTION"
+    return "SERVICE"
+
+
+def _station_department(station_name: str) -> str:
+    """Classify station as SERVICE or PRODUCTION based on name."""
+    s = station_name.lower()
+    production_keywords = ["batch", "expert", "initiator", "assembler"]
+    if any(kw in s for kw in production_keywords):
+        return "PRODUCTION"
+    return "SERVICE"
+
+
+def _parse_qualified_stations(qualified_str: str | None) -> set[int]:
+    if not qualified_str:
+        return set()
+    try:
+        return {int(x.strip()) for x in qualified_str.split(",") if x.strip()}
+    except Exception:
+        return set()
+
+
+def _employee_available_on(
+    employee: User,
+    availabilities: dict[int, list],
+    schedule_date: date,
+    start_time: time,
+    end_time: time,
+) -> bool:
+    """Check if employee has an availability window covering the shift on schedule_date."""
+    day_name = schedule_date.strftime("%A")
+    windows = availabilities.get(employee.id, [])
+    for a in windows:
+        # a is an Availability model row; day_of_week is a string like "Monday"
+        if a.day_of_week != day_name:
+            continue
+        if a.valid_from and a.valid_from > schedule_date:
+            continue
+        if a.valid_to and a.valid_to < schedule_date:
+            continue
+        if a.start_time <= start_time and a.end_time >= end_time:
+            return True
+    return False
+
+
+def _employee_absent_on(
+    employee_id: int,
+    absences: list,
+    schedule_date: date,
+) -> bool:
+    for a in absences:
+        if a.employee_id != employee_id:
+            continue
+        d = a.absence_date
+        if isinstance(d, str):
+            d = date.fromisoformat(d)
+        if d == schedule_date and a.status == AbsenceStatus.APPROVED:
+            return True
+    return False
+
+
+def _employee_on_leave_on(
+    employee_id: int,
+    leaves: list,
+    schedule_date: date,
+) -> bool:
+    for l in leaves:
+        if l.requester_id != employee_id:
+            continue
+        start_d = l.start_date
+        end_d = l.end_date
+        if isinstance(start_d, str):
+            start_d = date.fromisoformat(start_d)
+        if isinstance(end_d, str):
+            end_d = date.fromisoformat(end_d)
+        if start_d <= schedule_date <= end_d and l.status == "approved":
+            return True
+    return False
+
+
+def _hours_worked_this_week(
+    employee_id: int,
+    assignments: list,
+    schedule_date: date,
+) -> float:
+    """Sum hours from assignments in the same week (Mon-Sun) as schedule_date."""
+    week_start = schedule_date - timedelta(days=schedule_date.weekday())
+    week_end = week_start + timedelta(days=6)
+    total = 0.0
+    for a in assignments:
+        if a.user_id != employee_id:
+            continue
+        if not (week_start <= a.schedule_date <= week_end):
+            continue
+        if a.start_time and a.end_time:
+            total += (a.end_time.hour - a.start_time.hour) + (a.end_time.minute - a.start_time.minute) / 60.0
+    return total
+
+
+def _last_3_closing_stations(
+    employee_id: int,
+    assignments: list,
+) -> list[str]:
+    """Return station names from the last 3 CLOSING shifts (most recent first)."""
+    closing = [
+        a for a in assignments
+        if a.user_id == employee_id and a.shift_name == "Closing"
+    ]
+    closing.sort(key=lambda a: a.schedule_date, reverse=True)
+    return [a.station.name if a.station else "" for a in closing[:3]]
+
+
+@router.post("/generate-single-day", response_model=SingleDayResponse)
+def generate_single_day(
+    payload: SingleDayRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate a single-day schedule for a specific shift.
+    Follows hard rules (no silent breaks) and soft rules (fairness, rotation).
+    Returns JSON with assignments, unfilled slots, and notes.
+    """
+    target_date = payload.target_date
+    shift_name = payload.shift_name
+    branch_id = require_manager_branch_id(current_user)
+
+    notes: list[str] = []
+
+    # ---- Load stations for this branch ----
+    stations = db.query(Station).filter(Station.branch_id == branch_id).all()
+    station_by_id = {s.id: s for s in stations}
+
+    # ---- Load employees for this branch ----
+    employees = db.query(User).filter(
+        User.branch_id == branch_id,
+        User.role == UserRole.EMPLOYEE,
+        User.is_active.is_(True),
+    ).all()
+
+    # ---- Load availability windows ----
+    avail_rows = db.query(Availability).filter(
+        Availability.user_id.in_([e.id for e in employees]),
+    ).all() if employees else []
+    avail_by_user: dict[int, list] = {}
+    for a in avail_rows:
+        avail_by_user.setdefault(a.user_id, []).append(a)
+
+    # ---- Load absences ----
+    absences = db.query(Absence).filter(
+        Absence.branch_id == branch_id,
+        Absence.employee_id.in_([e.id for e in employees]),
+    ).all() if employees else []
+
+    # ---- Load leaves ----
+    leaves = db.query(CrewRequest).filter(
+        CrewRequest.branch_id == branch_id,
+        CrewRequest.requester_id.in_([e.id for e in employees]),
+        CrewRequest.request_type == "leave",
+    ).all() if employees else []
+
+    # ---- Load previous assignments (for rest rule + weekly hours + rotation) ----
+    week_start = target_date - timedelta(days=target_date.weekday())
+    week_end = week_start + timedelta(days=6)
+    all_assignments = db.query(ShiftAssignment).filter(
+        ShiftAssignment.branch_id == branch_id,
+        ShiftAssignment.schedule_date >= week_start - timedelta(days=1),
+        ShiftAssignment.schedule_date <= target_date,
+    ).all()
+
+    # ---- Compute weekly hours so far ----
+    weekly_hours: dict[int, float] = {}
+    for emp in employees:
+        weekly_hours[emp.id] = _hours_worked_this_week(emp.id, all_assignments, target_date)
+
+    # ---- Build staffing requirements for this shift ----
+    requirements = db.query(StaffingRequirement).filter(
+        StaffingRequirement.branch_id == branch_id,
+    ).all()
+
+    # Map station_id -> requirement for this shift
+    req_by_station: dict[int, StaffingRequirement] = {}
+    for r in requirements:
+        if r.shift_type == shift_name:
+            req_by_station[r.station_id] = r
+
+    # ---- Define target stations per department (from PROSESO spec) ----
+    service_targets = ["Lobby 1", "Lobby 2", "Lobby 3", "POS 2", "Beverages", "Fries", "Expidator"]
+    production_targets = ["Batch Grill", "Batch Fry", "Expert", "Initiator 1", "Assembler 1", "Assembler 2"]
+
+    # Find matching stations in DB
+    service_stations = [s for s in stations if s.name in service_stations]
+    production_stations = [s for s in stations if s.name in production_targets]
+
+    # Build required slots: (station, count)
+    required_slots: list[tuple[Station, int]] = []
+
+    # SERVICE specific stations first
+    for st_name in ["POS 2", "Beverages", "Fries", "Expidator"]:
+        st = next((s for s in stations if s.name == st_name), None)
+        if st:
+            req = req_by_station.get(st.id)
+            count = req.required_count if req else 1
+            required_slots.append((st, count))
+
+    # PRODUCTION specific stations
+    for st_name in ["Batch Grill", "Batch Fry", "Expert", "Initiator 1", "Assembler 1"]:
+        st = next((s for s in stations if s.name == st_name), None)
+        if st:
+            req = req_by_station.get(st.id)
+            count = req.required_count if req else 1
+            required_slots.append((st, count))
+
+    # Assembler 2 may not exist - check
+    st_assembler2 = next((s for s in stations if s.name == "Assembler 2"), None)
+    if st_assembler2:
+        req = req_by_station.get(st_assembler2.id)
+        count = req.required_count if req else 1
+        required_slots.append((st_assembler2, count))
+    else:
+        notes.append("Assembler 2 station not found in branch database; skipping.")
+
+    # Lobby/Server x3 - fill with remaining eligible SERVICE employees after specific stations
+    lobby_server_stations = [s for s in stations if s.name.startswith("Lobby") or s.name.startswith("Server")]
+    for st in lobby_server_stations[:3]:
+        req = req_by_station.get(st.id)
+        count = req.required_count if req else 1
+        required_slots.append((st, count))
+
+    # ---- Helper: check if employee can take this shift ----
+    def can_take(emp: User, station: Station, start_t: time, end_t: time) -> list[str]:
+        """Return list of hard-rule violation reasons, or empty if OK."""
+        reasons = []
+        # Rule 2: unavailable/absent/leave
+        if not _employee_available_on(emp, avail_by_user, target_date, start_t, end_t):
+            reasons.append("not available on this date/time")
+        if _employee_absent_on(emp.id, absences, target_date):
+            reasons.append("approved absence on this date")
+        if _employee_on_leave_on(emp.id, leaves, target_date):
+            reasons.append("approved leave on this date")
+        # Rule 3: skill/qualification
+        qual = _parse_qualified_stations(emp.qualified_stations)
+        if station.id not in qual:
+            reasons.append(f"not qualified for station '{station.name}'")
+        # Rule 4: department match
+        emp_dept = _department_from_crew_type(emp.crew_type)
+        st_dept = _station_department(station.name)
+        if emp_dept != st_dept:
+            reasons.append(f"department mismatch ({emp_dept} vs {st_dept})")
+        # Rule 6: max hours (use shift duration estimate: assume 8 hours for closing)
+        shift_dur = (end_t.hour - start_t.hour) + (end_t.minute - start_t.minute) / 60.0
+        max_h = emp.max_hours if emp.max_hours is not None else 80
+        if weekly_hours.get(emp.id, 0) + shift_dur > max_h:
+            reasons.append(f"would exceed weekly max hours ({max_h})")
+        # 11-hour rest rule (check previous day's closing shift)
+        prev_closing = [
+            a for a in all_assignments
+            if a.user_id == emp.id
+            and a.shift_name == "Closing"
+            and a.schedule_date == target_date - timedelta(days=1)
+        ]
+        if prev_closing:
+            reasons.append("closed yesterday; 11-hour rest would be violated")
+        return reasons
+
+    # ---- Phase 1: Fill specific stations first ----
+    assignments: list[dict] = []
+    used_employee_ids: set[int] = set()
+    unfilled: list[dict] = []
+
+    shift_start = time(14, 0)   # Closing starts 14:00
+    shift_end = time(22, 0)     # Closing ends 22:00
+
+    for station, count in required_slots:
+        filled = 0
+        # Sort eligible employees by fair hours (fewest first)
+        eligible = []
+        for emp in employees:
+            if emp.id in used_employee_ids:
+                continue
+            reasons = can_take(emp, station, shift_start, shift_end)
+            if reasons:
+                continue
+            # Soft rule: avoid same station as last 3 closing
+            last3 = _last_3_closing_stations(emp.id, all_assignments)
+            if station.name in last3:
+                continue  # deprioritize, but still eligible if no one else
+            eligible.append(emp)
+
+        # If no one passed rotation check, relax it (anyone eligible)
+        if not eligible:
+            for emp in employees:
+                if emp.id in used_employee_ids:
+                    continue
+                reasons = can_take(emp, station, shift_start, shift_end)
+                if not reasons:
+                    eligible.append(emp)
+
+        # Sort by fair hours (fewest weekly hours first)
+        eligible.sort(key=lambda e: weekly_hours.get(e.id, 0))
+
+        for emp in eligible:
+            if filled >= count:
+                break
+            used_employee_ids.add(emp.id)
+            filled += 1
+            weekly_hours[emp.id] = weekly_hours.get(emp.id, 0) + (shift_end.hour - shift_start.hour)
+            assignments.append({
+                "employee_id": emp.id,
+                "name": emp.full_name,
+                "department": _department_from_crew_type(emp.crew_type),
+                "station": station.name,
+            })
+
+        if filled < count:
+            unfilled.append({
+                "station": station.name,
+                "reason": f"only {filled}/{count} eligible crew available",
+            })
+            notes.append(f"Station '{station.name}': could not fill {count - filled} slot(s) - no eligible crew")
+
+    # ---- Phase 2: Lobby/Server random pick for remaining eligible SERVICE employees ----
+    # (Already included in required_slots above as Lobby/Server stations)
+    # The above loop already filled Lobby/Server stations. If any remain unfilled,
+    # they're already in unfilled list.
+
+    # ---- Build response ----
+    assignment_outs = [
+        AssignmentOut(
+            employee_id=a["employee_id"],
+            name=a["name"],
+            department=a["department"],
+            station=a["station"],
+        )
+        for a in assignments
+    ]
+
+    unfilled_outs = [
+        UnfilledOut(station=u["station"], reason=u["reason"])
+        for u in unfilled
+    ]
+
+    if not notes:
+        notes.append("All required stations filled within constraints.")
+
+    return SingleDayResponse(
+        date=str(target_date),
+        shift=shift_name,
+        assignments=assignment_outs,
+        unfilled_slots=unfilled_outs,
+        notes=notes,
+    )
