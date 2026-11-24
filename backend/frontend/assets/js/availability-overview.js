@@ -327,7 +327,6 @@ const availConfirmMessage = document.getElementById("availConfirmMessage");
 const availConfirmList = document.getElementById("availConfirmList");
 
 let editingMemberId = null;
-let pendingSaveWindows = null;
 
 function todayISO() {
     const d = new Date();
@@ -471,52 +470,6 @@ function saveEditAvailability() {
         .catch(error => {
             availEditSave.disabled = false;
             availEditSave.textContent = "Save changes";
-            if (error.responseData && error.responseData.detail && error.responseData.detail.conflicts) {
-                pendingSaveWindows = windows;
-                showConfirmDialog(error.responseData.detail.conflicts);
-            } else {
-                showSaveError(error.message || "Hindi ma-save ang availability.");
-            }
-        });
-}
-
-function showConfirmDialog(conflicts) {
-    availConfirmMessage.textContent = "May nakalagay na shift na hindi na ma-fit sa bagong availability. Gusto mo pa ring i-save?";
-    availConfirmList.innerHTML = "";
-    conflicts.forEach(c => {
-        const item = document.createElement("div");
-        item.style.cssText = "padding:6px 8px;border-bottom:1px solid #edf2f1;font-size:12px;";
-        item.innerHTML = `<strong>${escapeHtml(c.shift)}</strong> on ${escapeHtml(c.day)} ${escapeHtml(c.date)} (${escapeHtml(c.start)} - ${escapeHtml(c.end)})<br><span style="color:var(--danger);font-size:11px;">${escapeHtml(c.reason)}</span>`;
-        availConfirmList.append(item);
-    });
-    availConfirmModal.style.display = "flex";
-    availConfirmModal.setAttribute("aria-hidden", "false");
-}
-
-function closeConfirmDialog() {
-    availConfirmModal.style.display = "none";
-    availConfirmModal.setAttribute("aria-hidden", "true");
-    pendingSaveWindows = null;
-}
-
-function confirmSave() {
-    if (!editingMemberId || !pendingSaveWindows) return;
-    availConfirmSave.disabled = true;
-    availConfirmSave.textContent = "Saving...";
-    requestJson(`/availability/crew/${editingMemberId}`, {
-        method: "PUT",
-        body: JSON.stringify({ windows: pendingSaveWindows, confirm: true }),
-    })
-        .then(data => {
-            availConfirmSave.disabled = false;
-            availConfirmSave.textContent = "I understand, save anyway";
-            closeConfirmDialog();
-            closeEditModal();
-            loadOverview();
-        })
-        .catch(error => {
-            availConfirmSave.disabled = false;
-            availConfirmSave.textContent = "I understand, save anyway";
             showSaveError(error.message || "Hindi ma-save ang availability.");
         });
 }
@@ -550,16 +503,9 @@ if (!token || !user) {
     availEditCancel.addEventListener("click", closeEditModal);
     availEditSave.addEventListener("click", saveEditAvailability);
 
-    availConfirmClose.addEventListener("click", closeConfirmDialog);
-    availConfirmCancel.addEventListener("click", closeConfirmDialog);
-    availConfirmSave.addEventListener("click", confirmSave);
-
     // Close modal when clicking outside
     availEditModal.addEventListener("click", event => {
         if (event.target === availEditModal) closeEditModal();
-    });
-    availConfirmModal.addEventListener("click", event => {
-        if (event.target === availConfirmModal) closeConfirmDialog();
     });
 
     loadOverview();
