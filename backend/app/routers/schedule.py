@@ -5,12 +5,11 @@ from datetime import date, datetime, time, timedelta, timezone
 from pydantic import BaseModel, ConfigDict, Field
 import time
 import uuid
-import threading
 from functools import lru_cache
 
 from app.auth.branch_access import require_manager_branch_id
 from app.auth.dependencies import get_current_user
-from app.database import get_db, SessionLocal
+from app.database import get_db
 from app.models.schedule import Schedule
 from app.models.branch import Branch
 from app.models.assignment import ShiftAssignment
@@ -40,85 +39,6 @@ from app.services.scheduling import (
 )
 from app.services.station_shifts import StationShift, effective_station_shifts
 
-# ---- Background job storage (in-memory, fine for thesis demo) ----
-# Limits: lost on server restart, not shared across workers, no persistence.
-_generation_jobs: dict[str, dict] = {}
-_generation_jobs_lock = threading.Lock()
-
-
-def _new_job() -> str:
-    job_id = str(uuid.uuid4())
-    with _generation_jobs_lock:
-        _generation_jobs[job_id] = {
-            "status": "queued",
-            "created_at": time.perf_counter(),
-            "started_at": None,
-            "finished_at": None,
-            "elapsed_seconds": None,
-            "result": None,
-            "error": None,
-        }
-    return job_id
-
-
-def _get_job(job_id: str) -> dict | None:
-    with _generation_jobs_lock:
-        return _generation_jobs.get(job_id)
-
-
-def _set_job(job_id: str, **fields):
-    with _generation_jobs_lock:
-        job = _generation_jobs.get(job_id)
-        if job:
-            job.update(fields)
-
-
-def _run_generation_in_background(
-    job_id: str,
-    schedule_date: date,
-    branch_id: int,
-    db_session_factory,
-    current_user_id: int,
-):
-    """Run generate_full_week in a background thread."""
-    _set_job(job_id, status="running", started_at=time.perf_counter())
-    try:
-        db = db_session_factory()
-        try:
-            current_user = db.query(User).filter(User.id == current_user_id).first()
-            if not current_user:
-                raise ValueError("User not found")
-
-            result = generate_full_week(
-                schedule_date=schedule_date,
-                db=db,
-                current_user=current_user,
-            )
-            _set_job(
-                job_id,
-                status="done",
-                finished_at=time.perf_counter(),
-                result=result,
-            )
-        except Exception as e:
-            _set_job(
-                job_id,
-                status="failed",
-                finished_at=time.perf_counter(),
-                error=str(e),
-            )
-        finally:
-            db.close()
-    except Exception as e:
-        _set_job(
-            job_id,
-            status="failed",
-            finished_at=time.perf_counter(),
-            error=str(e),
-        )
-
-
-router = APIRouter(prefix="/schedules", tags=["Schedules"])
 
 
 def _period_label(d: date) -> str:
@@ -389,6 +309,8 @@ def _validate_draft_targets(
 
     return branch_id, shifts_by_key
 
+
+router = APIRouter(prefix="/schedules", tags=["Schedules"])
 
 @router.get("/", response_model=List[ScheduleResponse])
 def get_all_schedules(
@@ -1339,7 +1261,7 @@ def generate_full_day(
     )
 
 
-@router.post("/generate-full-week")
+
 @router.post("/generate-full-week")
 def generate_full_week(
     schedule_date: date,
@@ -1364,44 +1286,7 @@ def generate_full_week(
     }
 
 
-@router.get("/generate-status/{job_id}")
-def generate_status(job_id: str):
-    """Check status of a background schedule generation job."""
-    job = _get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
 
-    response = {
-        "job_id": job_id,
-        "status": job["status"],
-        "elapsed_seconds": None,
-    }
-
-    if job["started_at"]:
-        response["elapsed_seconds"] = round(
-            (job["finished_at"] or time.perf_counter()) - job["started_at"], 2
-        )
-
-    if job["status"] == "done":
-        response["result"] = job["result"]
-    elif job["status"] == "failed":
-        response["error"] = job["error"]
-
-    return response
-
-
-@router.post("/generate-cancel/{job_id}")
-def generate_cancel(job_id: str):
-    """Cancel a background schedule generation job (best-effort)."""
-    job = _get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    if job["status"] in ("done", "failed"):
-        return {"job_id": job_id, "status": job["status"], "message": "Job already finished"}
-
-    _set_job(job_id, status="cancelled", finished_at=time.perf_counter())
-    return {"job_id": job_id, "status": "cancelled", "message": "Job marked for cancellation"}
 
 @router.post("/publish")
 def publish_schedule(
