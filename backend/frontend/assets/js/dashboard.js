@@ -127,9 +127,16 @@ document.getElementById("generateScheduleForm").addEventListener("submit", async
     genError.style.display = "none";
 
     try {
-        const response = await fetch(`${API_URL}/schedules/generate-full-week?schedule_date=${date}`, {
+        const response = await fetch(`${API_URL}/schedules/generate-single-day`, {
             method: "POST",
-            headers: { "Authorization": `Bearer ${token}` }
+            headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                target_date: date,
+                shift_name: "Closing"
+            })
         });
         const data = await response.json();
 
@@ -143,129 +150,24 @@ document.getElementById("generateScheduleForm").addEventListener("submit", async
             return;
         }
 
-        const jobId = data.job_id;
-        if (!jobId) {
-            genBtn.disabled = false;
-            genBtnText.textContent = "Lagyan ng schedule";
-            genBtnSpinner.style.display = "none";
-            genError.textContent = "Hindi makakuha ng job ID mula sa server.";
-            genError.style.display = "block";
-            resultDiv.style.display = "none";
-            return;
-        }
+        currentWeekSchedule = [data];
+        currentWeekStartDate = date;
+        selectedDayFilter = "all";
+        document.getElementById("gen_week_start").disabled = true;
+        document.getElementById("clearDraftAssignmentsButton").disabled = false;
 
-        currentPollJobId = jobId;
-        const cancelBtn = document.getElementById("genCancelBtn");
-        if (cancelBtn) cancelBtn.style.display = "inline-block";
+        resultDiv.style.display = "block";
+        resultBody.innerHTML = "";
 
-        // Polling state
-        let pollCount = 0;
-        const maxPolls = 40; // ~60 seconds at 1.5s interval
-        const pollInterval = 1500;
-        let pollTimer = null;
-        let jobStartTime = null;
+        const sumData = buildSummaryFromData([data]);
+        renderSummaryCards(sumData);
+        renderShortageTab(sumData);
+        renderHoursTab(sumData);
+        renderSchedulePreview([data]);
 
-        const startTime = Date.now();
-
-        function pollStatus() {
-            pollCount++;
-            const elapsed = Math.round((Date.now() - startTime) / 1000);
-
-            fetch(`${API_URL}/schedules/generate-status/${jobId}`, {
-                headers: { "Authorization": `Bearer ${token}` }
-            })
-                .then(async (res) => {
-                    const statusData = await res.json();
-                    if (!res.ok) {
-                        throw new Error(statusData.detail || "Status check failed");
-                    }
-
-                    // Update elapsed time display
-                    if (statusData.elapsed_seconds !== undefined) {
-                        const elSpan = document.getElementById("genElapsed");
-                        if (elSpan) elSpan.textContent = `${statusData.elapsed_seconds.toFixed(1)}s`;
-                    }
-
-                    if (statusData.status === "done") {
-                        clearInterval(pollTimer);
-                        currentPollTimer = null;
-                        currentPollJobId = null;
-                        const cancelBtn = document.getElementById("genCancelBtn");
-                        if (cancelBtn) cancelBtn.style.display = "none";
-                        genBtn.disabled = false;
-                        genBtnText.textContent = "Lagyan ng schedule";
-                        genBtnSpinner.style.display = "none";
-
-                        currentWeekSchedule = statusData.result;
-                        currentWeekStartDate = date;
-                        selectedDayFilter = "all";
-                        document.getElementById("gen_week_start").disabled = true;
-                        document.getElementById("clearDraftAssignmentsButton").disabled = false;
-
-                        resultDiv.style.display = "block";
-                        resultBody.innerHTML = "";
-
-                        const sumData = buildSummaryFromData(statusData.result);
-                        renderSummaryCards(sumData);
-                        renderShortageTab(sumData);
-                        renderHoursTab(sumData);
-                        renderSchedulePreview(statusData.result);
-                    } else if (statusData.status === "failed") {
-                        clearInterval(pollTimer);
-                        currentPollTimer = null;
-                        currentPollJobId = null;
-                        const cancelBtn = document.getElementById("genCancelBtn");
-                        if (cancelBtn) cancelBtn.style.display = "none";
-                        genBtn.disabled = false;
-                        genBtnText.textContent = "Lagyan ng schedule";
-                        genBtnSpinner.style.display = "none";
-                        genError.textContent = statusData.error || "Nagkamang ang pag-generate.";
-                        genError.style.display = "block";
-                        resultDiv.style.display = "none";
-                    } else if (statusData.status === "cancelled") {
-                        clearInterval(pollTimer);
-                        currentPollTimer = null;
-                        currentPollJobId = null;
-                        const cancelBtn = document.getElementById("genCancelBtn");
-                        if (cancelBtn) cancelBtn.style.display = "none";
-                        genBtn.disabled = false;
-                        genBtnText.textContent = "Lagyan ng schedule";
-                        genBtnSpinner.style.display = "none";
-                        genError.textContent = "In-cancel ang pag-generate.";
-                        genError.style.display = "block";
-                        resultDiv.style.display = "none";
-                    } else if (pollCount >= maxPolls) {
-                        clearInterval(pollTimer);
-                        currentPollTimer = null;
-                        currentPollJobId = null;
-                        const cancelBtn = document.getElementById("genCancelBtn");
-                        if (cancelBtn) cancelBtn.style.display = "none";
-                        genBtn.disabled = false;
-                        genBtnText.textContent = "Lagyan ng schedule";
-                        genBtnSpinner.style.display = "none";
-                        genError.textContent = "Nag-expire ang oras ng pag-generate. Subukan muli.";
-                        genError.style.display = "block";
-                        resultDiv.style.display = "none";
-                    }
-                    // else: still queued/running, keep polling
-                })
-                .catch((err) => {
-                    clearInterval(pollTimer);
-                    currentPollTimer = null;
-                    currentPollJobId = null;
-                    const cancelBtn = document.getElementById("genCancelBtn");
-                    if (cancelBtn) cancelBtn.style.display = "none";
-                    genBtn.disabled = false;
-                    genBtnText.textContent = "Lagyan ng schedule";
-                    genBtnSpinner.style.display = "none";
-                    genError.textContent = "Hindi makonekta sa server. Isubok muli.";
-                    genError.style.display = "block";
-                    resultDiv.style.display = "none";
-                });
-        }
-
-        pollStatus();
-        currentPollTimer = setInterval(pollStatus, pollInterval);
+        genBtn.disabled = false;
+        genBtnText.textContent = "Lagyan ng schedule";
+        genBtnSpinner.style.display = "none";
 
     } catch (err) {
         genBtn.disabled = false;
@@ -274,10 +176,7 @@ document.getElementById("generateScheduleForm").addEventListener("submit", async
         genError.textContent = "Hindi makonekta sa server. Isubok muli.";
         genError.style.display = "block";
         resultDiv.style.display = "none";
-    }
-});
-
-// Cancel button handler
+    }});
 let currentPollJobId = null;
 let currentPollTimer = null;
 
