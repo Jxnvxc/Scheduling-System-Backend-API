@@ -344,6 +344,52 @@ function renderRequirements(requirements, stationPriorities = new Map()) {
     saveButton.disabled = false;
 }
 
+// Shared helpers for building shift row cells (deduplicated across
+// createEditorShiftRow and createShiftRow).
+function createTimeInput(value, ariaLabel) {
+    const input = document.createElement("input");
+    input.className = "shift-config-input";
+    input.type = "time";
+    input.required = true;
+    input.value = value || "";
+    input.setAttribute("aria-label", ariaLabel);
+    return input;
+}
+
+function createNumberInput(value, extraClass, ariaLabel) {
+    const input = document.createElement("input");
+    input.className = `requirement-count-input${extraClass ? " " + extraClass : ""}`;
+    input.type = "number";
+    input.min = "0";
+    input.max = "100";
+    input.step = "1";
+    input.required = true;
+    input.value = value || "";
+    input.setAttribute("aria-label", ariaLabel);
+    return input;
+}
+
+function createCheckboxInput(checked, ariaLabel) {
+    const input = document.createElement("input");
+    input.className = "shift-enabled-input";
+    input.type = "checkbox";
+    input.checked = checked !== false;
+    input.setAttribute("aria-label", ariaLabel);
+    return input;
+}
+
+function bindShiftToggle(row, enabledInput, inputs) {
+    const toggleShiftInputs = () => {
+        const isEnabled = enabledInput.checked;
+        inputs.forEach(input => {
+            if (input) input.disabled = !isEnabled;
+        });
+        row.classList.toggle("staffing-shift-disabled", !isEnabled);
+    };
+    enabledInput.addEventListener("change", toggleShiftInputs);
+    toggleShiftInputs();
+}
+
 function createEditorShiftRow(shift, shiftType, stationName, minimumCrew) {
     const defaults = getDefaultShiftTimes(shiftType);
     const startValue = (shift && shift.start_time ? shift.start_time.slice(0, 5) : defaults.start);
@@ -360,64 +406,27 @@ function createEditorShiftRow(shift, shiftType, stationName, minimumCrew) {
     nameCell.textContent = shiftType;
 
     const startCell = document.createElement("td");
-    const startInput = document.createElement("input");
-    startInput.className = "shift-config-input";
-    startInput.type = "time";
-    startInput.required = true;
-    startInput.value = startValue;
-    startInput.setAttribute("aria-label", `${stationName} ${shiftType} start time`);
-    startCell.append(startInput);
+    startCell.append(createTimeInput(startValue, `${stationName} ${shiftType} start time`));
 
     const endCell = document.createElement("td");
-    const endInput = document.createElement("input");
-    endInput.className = "shift-config-input";
-    endInput.type = "time";
-    endInput.required = true;
-    endInput.value = endValue;
-    endInput.setAttribute("aria-label", `${stationName} ${shiftType} end time`);
-    endCell.append(endInput);
+    endCell.append(createTimeInput(endValue, `${stationName} ${shiftType} end time`));
 
     const countCell = document.createElement("td");
-    const countInput = document.createElement("input");
-    countInput.className = "requirement-count-input";
-    countInput.type = "number";
-    countInput.min = "0";
-    countInput.max = "100";
-    countInput.step = "1";
-    countInput.required = true;
-    countInput.value = requiredCount;
-    countInput.setAttribute("aria-label", `${stationName} ${shiftType} required crew`);
-    countCell.append(countInput);
+    countCell.append(createNumberInput(requiredCount, null, `${stationName} ${shiftType} required crew`));
 
     const minCell = document.createElement("td");
-    const minInput = document.createElement("input");
-    minInput.className = "requirement-count-input min-crew-input";
-    minInput.type = "number";
-    minInput.min = "0";
-    minInput.max = "100";
-    minInput.step = "1";
-    minInput.required = true;
-    minInput.value = minCrewValue;
-    minInput.setAttribute("aria-label", `${stationName} ${shiftType} minimum crew`);
-    minCell.append(minInput);
+    minCell.append(createNumberInput(minCrewValue, "min-crew-input", `${stationName} ${shiftType} minimum crew`));
 
     const enabledCell = document.createElement("td");
-    const enabledInput = document.createElement("input");
-    enabledInput.className = "shift-enabled-input";
-    enabledInput.type = "checkbox";
-    enabledInput.checked = enabled;
-    enabledInput.setAttribute("aria-label", `${stationName} ${shiftType} shift enabled`);
+    const enabledInput = createCheckboxInput(enabled, `${stationName} ${shiftType} shift enabled`);
+    enabledCell.append(enabledInput);
 
-    const toggleShiftInputs = () => {
-        const isEnabled = enabledInput.checked;
-        startInput.disabled = !isEnabled;
-        endInput.disabled = !isEnabled;
-        countInput.disabled = !isEnabled;
-        minInput.disabled = !isEnabled;
-        row.classList.toggle("staffing-shift-disabled", !isEnabled);
-    };
-    enabledInput.addEventListener("change", toggleShiftInputs);
-    toggleShiftInputs();
+    bindShiftToggle(row, enabledInput, [
+        row.querySelector('input[type="time"]'),
+        row.querySelectorAll('input[type="time"]')[1],
+        row.querySelectorAll('input[type="number"]')[0],
+        row.querySelectorAll('input[type="number"]')[1],
+    ]);
 
     enabledCell.append(enabledInput);
     row.append(nameCell, startCell, endCell, countCell, minCell, enabledCell);
@@ -447,58 +456,25 @@ function createShiftRow(shift) {
     nameCell.textContent = shift.shift_type;
 
     const startCell = document.createElement("td");
-    const startInput = document.createElement("input");
-    startInput.className = "shift-config-input";
-    startInput.type = "time";
-    startInput.required = true;
-    startInput.value = startValue;
-    startInput.setAttribute("aria-label", `${shift.station_name} ${shift.shift_type} start time`);
-    startCell.append(startInput);
+    startCell.append(createTimeInput(startValue, `${shift.station_name} ${shift.shift_type} start time`));
 
     const endCell = document.createElement("td");
-    const endInput = document.createElement("input");
-    endInput.className = "shift-config-input";
-    endInput.type = "time";
-    endInput.required = true;
-    endInput.value = endValue;
-    endInput.setAttribute("aria-label", `${shift.station_name} ${shift.shift_type} end time`);
-    endCell.append(endInput);
+    endCell.append(createTimeInput(endValue, `${shift.station_name} ${shift.shift_type} end time`));
 
     const countCell = document.createElement("td");
-    const countInput = document.createElement("input");
-    countInput.className = "requirement-count-input";
-    countInput.type = "number";
-    countInput.min = "0";
-    countInput.max = "100";
-    countInput.step = "1";
-    countInput.required = true;
-    countInput.value = String(shift.required_count ?? 1);
-    countInput.setAttribute("aria-label", `${shift.station_name} ${shift.shift_type} required crew`);
-    countCell.append(countInput);
+    countCell.append(createNumberInput(String(shift.required_count ?? 1), null, `${shift.station_name} ${shift.shift_type} required crew`));
 
     const enabledCell = document.createElement("td");
-    const enabledInput = document.createElement("input");
-    enabledInput.className = "shift-enabled-input";
-    enabledInput.type = "checkbox";
-    enabledInput.checked = shift.enabled !== false;
-    enabledInput.setAttribute(
-        "aria-label",
-        `${shift.station_name} ${shift.shift_type} shift enabled`,
-    );
-
-    const toggleShiftInputs = () => {
-        const enabled = enabledInput.checked;
-        startInput.disabled = !enabled;
-        endInput.disabled = !enabled;
-        countInput.disabled = !enabled;
-        row.classList.toggle("staffing-shift-disabled", !enabled);
-    };
-    enabledInput.addEventListener("change", toggleShiftInputs);
-    toggleShiftInputs();
-
+    const enabledInput = createCheckboxInput(shift.enabled !== false, `${shift.station_name} ${shift.shift_type} shift enabled`);
     enabledCell.append(enabledInput);
-    row.classList.toggle("staffing-shift-disabled", !enabledInput.checked);
 
+    bindShiftToggle(row, enabledInput, [
+        row.querySelector('input[type="time"]'),
+        row.querySelectorAll('input[type="time"]')[1],
+        row.querySelectorAll('input[type="number"]')[0],
+    ]);
+
+    row.classList.toggle("staffing-shift-disabled", !enabledInput.checked);
     row.append(nameCell, startCell, endCell, countCell, enabledCell);
     return row;
 }
