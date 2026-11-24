@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 import time
 import uuid
 import threading
+from functools import lru_cache
 
 from app.auth.branch_access import require_manager_branch_id
 from app.auth.dependencies import get_current_user
@@ -142,6 +143,42 @@ def _station_core_rank(station_name: str) -> int:
     return 0 if station_name.strip().casefold() in CORE_STATIONS else 1
 
 
+# ---------------------------------------------------------------------------
+# Caching helpers for the schedule generator
+# ---------------------------------------------------------------------------
+
+class ShiftHoursCache:
+    def __init__(self):
+        self._cache = {}
+
+    def get(self, shift_name, station, start_time, end_time):
+        key = (shift_name, station.id, start_time, end_time)
+        if key not in self._cache:
+            self._cache[key] = shift_hours(
+                shift_name, station=station, start_time=start_time, end_time=end_time,
+            )
+        return self._cache[key]
+
+
+class AvailabilityCache:
+    def __init__(self):
+        self._cache = {}
+
+    def get(self, employee_id, availabilities, schedule_date, shift_name, station, start_time, end_time):
+        key = (employee_id, shift_name, start_time, end_time)
+        if key not in self._cache:
+            self._cache[key] = employee_is_available(
+                availabilities.get(employee_id, []),
+                schedule_date,
+                shift_name,
+                station,
+                start_time=start_time,
+                end_time=end_time,
+            )
+        return self._cache[key]
+
+
+# ---------------------------------------------------------------------------
 def _get_pre_holiday_mirror_setting(db: Session, branch_id: int) -> bool:
     setting = (
         db.query(SystemSetting)
@@ -731,13 +768,21 @@ def _repair_shift(
     unavailable_employee_ids: set[int],
     schedule_date: date,
     station_by_id: dict[int, Station],
+    last_shift_end: dict[int, datetime] | None = None,
+    hours_cache: ShiftHoursCache | None = None,
+    avail_cache: AvailabilityCache | None = None,
 ) -> None:
     """Try to fill remaining unfilled slots by moving crew from over-subscribed slots.
     Only moves crew if the source slot stays >= minimum_crew and all rules still pass."""
     if required_count <= minimum_crew:
         return
 
-    shift_h = shift_hours(shift_name, station=station, start_time=start_time, end_time=end_time)
+    if hours_cache is None:
+        hours_cache = ShiftHoursCache()
+    if avail_cache is None:
+        avail_cache = AvailabilityCache()
+
+    shift_h = hours_cache.get(shift_name, station, start_time, end_time)
 
     # Find candidates who could be moved: already assigned to this day but not this shift,
     # and their current slot has more than minimum crew.
@@ -747,13 +792,9 @@ def _repair_shift(
             continue
         if not employee_is_qualified(emp, station.id):
             continue
-        if not employee_is_available(
-            availabilities.get(emp.id, []),
-            schedule_date,
-            shift_name,
-            station,
-            start_time=start_time,
-            end_time=end_time,
+        if not avail_cache.get(
+            emp.id, availabilities, schedule_date,
+            shift_name, station, start_time, end_time,
         ):
             continue
         max_h = emp.max_hours if emp.max_hours is not None else 80
@@ -776,7 +817,11 @@ def _repair_shift(
     for emp in movable_candidates:
         if len(assigned_for_this_shift) >= required_count:
             break
-        # Check overlap with existing same-day assignments
+        # Fast overlap check via last_shift_end
+        last_end = last_shift_end.get(emp.id) if last_shift_end else None
+        if last_end is not None and start_time < last_end:
+            continue
+        # Also check full intervals for safety
         if any(
             not (datetime.combine(schedule_date, end_time) <= ex_start
                  or datetime.combine(schedule_date, start_time) >= ex_end)
@@ -828,7 +873,7 @@ def _generate_single_day(
 ) -> dict:
     t_day0 = time.perf_counter()
 
-    # Backward-compatible: if caller didn't pre-load, query DB for this day
+    # ---- Backward-compatible: pre-load data if caller didn't ----
     if unavailable_employee_ids is None:
         approved_leaves = db.query(CrewRequest.requester_id).filter(
             CrewRequest.branch_id == branch_id,
@@ -869,9 +914,18 @@ def _generate_single_day(
 
     assigned_employee_intervals: dict[int, list[tuple[datetime, datetime]]] = {}
 
-    # Build every slot with its qualified + available crew first, then fill
-    # the hardest slots first (fewest qualified + available candidates) so
-    # scarce crew are not wasted on easy slots.
+    # ---- Caches for this day's generation ----
+    hours_cache = ShiftHoursCache()
+    avail_cache = AvailabilityCache()
+
+    # Track last shift end per employee for O(1) rest check
+    last_shift_end: dict[int, time] = {}
+    for emp_id, intervals in assigned_employee_intervals.items():
+        if intervals:
+            last_shift_end[emp_id] = max(e for _, e in intervals).time()
+
+    # ---- Build slots with pre-computed eligible candidates ----
+    t_build0 = time.perf_counter()
     slots = []
     for station in stations:
         for shift in shifts_by_station.get(station.id, []):
@@ -879,24 +933,21 @@ def _generate_single_day(
             start_time, end_time = shift.start_time, shift.end_time
             minimum_crew = shift.minimum_crew if shift.minimum_crew is not None else shift.required_count
             required_count = shift.required_count
-            qualified_only = [
-                employee
-                for employee in employees
-                if employee.id not in unavailable_employee_ids
-                and employee_is_qualified(employee, station.id)
-            ]
-            qualified_employees = [
-                employee
-                for employee in qualified_only
-                if employee_is_available(
-                    availabilities.get(employee.id, []),
-                    schedule_date,
-                    shift_name,
-                    station,
-                    start_time=start_time,
-                    end_time=end_time,
-                )
-            ]
+
+            # Pre-compute qualified + available candidates once per slot
+            qualified_employees = []
+            for employee in employees:
+                if employee.id in unavailable_employee_ids:
+                    continue
+                if not employee_is_qualified(employee, station.id):
+                    continue
+                if not avail_cache.get(
+                    employee.id, availabilities, schedule_date,
+                    shift_name, station, start_time, end_time,
+                ):
+                    continue
+                qualified_employees.append(employee)
+
             slots.append(
                 {
                     "station": station,
@@ -907,46 +958,14 @@ def _generate_single_day(
                     "end_time": end_time,
                     "minimum_crew": minimum_crew,
                     "required_count": required_count,
-                    "qualified_only": qualified_only,
                     "qualified_employees": qualified_employees,
-                    "qualified_crew": [
-                        {
-                            "id": employee.id,
-                            "name": employee.full_name,
-                            "crew_type": employee.crew_type,
-                            "min_hours": (
-                                employee.min_hours
-                                if employee.min_hours is not None
-                                else 40
-                            ),
-                            "max_hours": (
-                                employee.max_hours
-                                if employee.max_hours is not None
-                                else 80
-                            ),
-                            "available_start": (
-                                min(
-                                    (a.start_time for a in availabilities.get(
-                                        employee.id, []
-                                    )),
-                                    default=None,
-                                )
-                            ),
-                            "available_end": (
-                                max(
-                                    (a.end_time for a in availabilities.get(
-                                        employee.id, []
-                                    )),
-                                    default=None,
-                                )
-                            ),
-                        }
-                        for employee in qualified_employees
-                    ],
                     "candidate_count": len(qualified_employees),
                 }
             )
 
+    t_build1 = time.perf_counter()
+
+    # Sort hardest-first: fewest eligible candidates first
     slots.sort(
         key=lambda slot: (
             slot["station_priority"],
@@ -959,15 +978,20 @@ def _generate_single_day(
         )
     )
 
-    # Build mirror map: (station_id, shift_name) -> list of user_ids from previous day
+    # Build mirror map
     mirror_map: dict[tuple[int, str], list[int]] = {}
     if pre_holiday_mirror_enabled and holiday_info and previous_day_assignments:
         for assignment in previous_day_assignments:
             key = (assignment.station_id, assignment.shift_name)
             mirror_map.setdefault(key, []).append(assignment.user_id)
 
+    # Pre-compute employee lookup by id for mirror candidates
+    employees_by_id = {e.id: e for e in employees}
+
     generated_schedule = []
     unfilled = []
+    t_fill0 = time.perf_counter()
+
     for slot in slots:
         station = slot["station"]
         shift_name = slot["shift_name"]
@@ -982,165 +1006,119 @@ def _generate_single_day(
         mirror_used_for_slot = False
         mirror_conflict_reason: str | None = None
 
+        # Mirror candidates from previous day
         mirror_candidates: list = []
         if pre_holiday_mirror_enabled and holiday_info:
             mirror_key = (station.id, shift_name)
             mirror_user_ids = mirror_map.get(mirror_key, [])
             for uid in mirror_user_ids:
-                emp = next((e for e in employees if e.id == uid), None)
+                emp = employees_by_id.get(uid)
                 if emp and emp.id not in assigned_ids_this_shift:
                     mirror_candidates.append(emp)
 
-        def _fill_shift(target_count: int) -> int:
-            """Fill up to target_count crew for this shift. Returns how many
-            were actually assigned. Respects mirror, availability,
-            qualifications, max hours, and 11-hour rest."""
-            nonlocal mirror_used_for_slot, mirror_conflict_reason
-            while len(assigned_for_this_shift) < target_count:
-                mirror_ids = {e.id for e in mirror_candidates}
-                normal_candidates = sorted(
-                    [
-                        e
-                        for e in employees
-                        if e.id not in assigned_ids_this_shift
-                        and e.id not in mirror_ids
-                    ],
-                    key=lambda employee: fairness_priority(
-                        employee, scheduled_hours.get(employee.id, 0)
-                    ),
+        # Single-pass fill: minimum crew first, then top up to required_count
+        # We iterate until we hit required_count OR run out of candidates.
+        # Minimum crew is prioritized by checking after each assignment.
+        shift_h = hours_cache.get(shift_name, station, start_time, end_time)
+
+        remaining_candidates = list(qualified_employees)
+        # Sort remaining by fairness priority once
+        remaining_candidates.sort(
+            key=lambda employee: fairness_priority(
+                employee, scheduled_hours.get(employee.id, 0)
+            ),
+        )
+
+        mirror_ids = {e.id for e in mirror_candidates}
+        all_candidates = mirror_candidates + [
+            e for e in remaining_candidates if e.id not in mirror_ids
+        ]
+
+        for employee in all_candidates:
+            if len(assigned_for_this_shift) >= required_count:
+                break
+
+            is_mirror_candidate = employee.id in mirror_ids
+
+            # Fast overlap check: employee already assigned this shift?
+            if employee.id in assigned_ids_this_shift:
+                if is_mirror_candidate and mirror_conflict_reason is None:
+                    mirror_conflict_reason = "Already assigned this shift"
+                continue
+
+            # Fast overlap check: employee already has another shift today
+            last_end = last_shift_end.get(employee.id)
+            if last_end is not None and start_time < last_end:
+                if is_mirror_candidate and mirror_conflict_reason is None:
+                    mirror_conflict_reason = "Overlapping shift on same day"
+                continue
+
+            # Max hours check (cached shift hours)
+            max_hours = employee.max_hours if employee.max_hours is not None else 80
+            if scheduled_hours.get(employee.id, 0) + shift_h > max_hours:
+                if is_mirror_candidate and mirror_conflict_reason is None:
+                    mirror_conflict_reason = "Would exceed max hours"
+                continue
+
+            # 11-hour minimum rest check (O(1) via last_shift_end)
+            candidate = ScheduleCandidate(
+                user_id=employee.id,
+                station_id=station.id,
+                shift_name=shift_name,
+                start_time=start_time,
+                end_time=end_time,
+            )
+            if not has_minimum_rest(
+                employee.id,
+                candidate,
+                schedule_date,
+                scheduled_for_rest,
+                station_by_id,
+            ):
+                if is_mirror_candidate and mirror_conflict_reason is None:
+                    mirror_conflict_reason = "Less than 11-hour rest"
+                continue
+
+            # Select this employee
+            selected_employee = employee
+            is_mirror_selection = is_mirror_candidate
+
+            # Check if we still meet minimum crew after this assignment
+            # (minimum crew is checked implicitly by filling up to required_count;
+            #  if we can't fill required_count, we check minimum_met after)
+
+            mirror_used_for_slot = mirror_used_for_slot or is_mirror_selection
+
+            assigned_entry = {
+                "id": selected_employee.id,
+                "name": selected_employee.full_name,
+                "crew_type": selected_employee.crew_type,
+            }
+            if is_mirror_selection:
+                assigned_entry["is_mirrored"] = True
+            assigned_for_this_shift.append(assigned_entry)
+            assigned_ids_this_shift.add(selected_employee.id)
+            assigned_employee_intervals.setdefault(selected_employee.id, []).append(
+                (
+                    datetime.combine(schedule_date, start_time),
+                    datetime.combine(schedule_date, end_time),
                 )
-                all_candidates = mirror_candidates + normal_candidates
-
-                selected_employee = None
-                is_mirror_selection = False
-
-                for employee in all_candidates:
-                    is_mirror_candidate = employee.id in mirror_ids
-
-                    if any(
-                        not (
-                            datetime.combine(schedule_date, end_time) <= existing_start
-                            or datetime.combine(schedule_date, start_time) >= existing_end
-                        )
-                        for existing_start, existing_end in assigned_employee_intervals.get(employee.id, [])
-                    ):
-                        if is_mirror_candidate and mirror_conflict_reason is None:
-                            mirror_conflict_reason = "Overlapping shift on same day"
-                        continue
-                    candidate = ScheduleCandidate(
-                        user_id=employee.id,
-                        station_id=station.id,
-                        shift_name=shift_name,
-                        start_time=start_time,
-                        end_time=end_time,
-                    )
-                    maximum_hours = (
-                        employee.max_hours if employee.max_hours is not None else 80
-                    )
-                    if (
-                        employee.id in unavailable_employee_ids
-                        or not employee_is_qualified(employee, station.id)
-                        or not employee_is_available(
-                            availabilities.get(employee.id, []),
-                            schedule_date,
-                            shift_name,
-                            station,
-                            start_time=start_time,
-                            end_time=end_time,
-                        )
-                        or scheduled_hours.get(employee.id, 0)
-                        + shift_hours(
-                            shift_name,
-                            station=station,
-                            start_time=start_time,
-                            end_time=end_time,
-                        )
-                        > maximum_hours
-                        or not has_minimum_rest(
-                            employee.id,
-                            candidate,
-                            schedule_date,
-                            scheduled_for_rest,
-                            station_by_id,
-                        )
-                    ):
-                        if is_mirror_candidate and mirror_conflict_reason is None:
-                            if employee.id in unavailable_employee_ids:
-                                mirror_conflict_reason = "Crew on approved leave or absence"
-                            elif not employee_is_qualified(employee, station.id):
-                                mirror_conflict_reason = "Not qualified for this station"
-                            elif not employee_is_available(
-                                availabilities.get(employee.id, []),
-                                schedule_date,
-                                shift_name,
-                                station,
-                                start_time=start_time,
-                                end_time=end_time,
-                            ):
-                                mirror_conflict_reason = "Outside crew availability"
-                            elif (
-                                scheduled_hours.get(employee.id, 0)
-                                + shift_hours(
-                                    shift_name,
-                                    station=station,
-                                    start_time=start_time,
-                                    end_time=end_time,
-                                )
-                                > maximum_hours
-                            ):
-                                mirror_conflict_reason = "Would exceed 80-hour max"
-                            else:
-                                mirror_conflict_reason = "Less than 11-hour rest"
-                        continue
-                    selected_employee = employee
-                    is_mirror_selection = is_mirror_candidate
-                    break
-
-                if selected_employee is None:
-                    break
-
-                mirror_used_for_slot = mirror_used_for_slot or is_mirror_selection
-
-                assigned_entry = {
-                    "id": selected_employee.id,
-                    "name": selected_employee.full_name,
-                    "crew_type": selected_employee.crew_type,
-                }
-                if is_mirror_selection:
-                    assigned_entry["is_mirrored"] = True
-                assigned_for_this_shift.append(assigned_entry)
-                assigned_ids_this_shift.add(selected_employee.id)
-                assigned_employee_intervals.setdefault(selected_employee.id, []).append(
-                    (
-                        datetime.combine(schedule_date, start_time),
-                        datetime.combine(schedule_date, end_time),
-                    )
+            )
+            scheduled_hours[selected_employee.id] = (
+                scheduled_hours.get(selected_employee.id, 0) + shift_h
+            )
+            scheduled_for_rest.append(
+                ScheduledAssignment(
+                    user_id=selected_employee.id,
+                    station_id=station.id,
+                    shift_name=shift_name,
+                    schedule_date=schedule_date,
+                    start_time=start_time,
+                    end_time=end_time,
                 )
-                scheduled_hours[selected_employee.id] = (
-                    scheduled_hours.get(selected_employee.id, 0)
-                    + shift_hours(
-                        shift_name,
-                        station=station,
-                        start_time=start_time,
-                        end_time=end_time,
-                    )
-                )
-                scheduled_for_rest.append(
-                    ScheduledAssignment(
-                        user_id=selected_employee.id,
-                        station_id=station.id,
-                        shift_name=shift_name,
-                        schedule_date=schedule_date,
-                        start_time=start_time,
-                        end_time=end_time,
-                    )
-                )
-            return len(assigned_for_this_shift)
-
-        # Phase 1: fill to minimum crew first (most important stations first)
-        _fill_shift(minimum_crew)
-        # Phase 2: top up to ideal required count if crew remains
-        _fill_shift(required_count)
+            )
+            # Track last shift end for O(1) rest check
+            last_shift_end[selected_employee.id] = end_time
 
         assigned_count = len(assigned_for_this_shift)
         unfilled_count = required_count - assigned_count
@@ -1149,13 +1127,16 @@ def _generate_single_day(
         # Repair pass: try to fill remaining unfilled slots by moving crew
         # from over-subscribed slots (where assigned > minimum_crew) to unfilled ones
         if unfilled_count > 0:
+            t_repair0 = time.perf_counter()
             _repair_shift(
                 station, shift_name, start_time, end_time, minimum_crew, required_count,
                 assigned_for_this_shift, assigned_ids_this_shift,
                 assigned_employee_intervals, scheduled_hours, scheduled_for_rest,
-                employees, slot["qualified_employees"], availabilities,
-                unavailable_employee_ids, schedule_date, station_by_id
+                employees, qualified_employees, availabilities,
+                unavailable_employee_ids, schedule_date, station_by_id,
+                last_shift_end, hours_cache,
             )
+            t_repair1 = time.perf_counter()
             # Recalculate after repair
             assigned_count = len(assigned_for_this_shift)
             unfilled_count = required_count - assigned_count
@@ -1173,7 +1154,7 @@ def _generate_single_day(
                 "minimum_met": minimum_met,
                 "priority": slot["station_priority"],
                 "breakdown": unfilled_slot_breakdown(
-                    slot["qualified_only"],
+                    slot.get("qualified_only", qualified_employees),
                     qualified_employees,
                     set(assigned_employee_intervals.keys()),
                     scheduled_hours,
@@ -1200,13 +1181,20 @@ def _generate_single_day(
                 "needed": required_count,
                 "minimum_crew": minimum_crew,
                 "assigned": assigned_for_this_shift,
-                "qualified_crew": slot["qualified_crew"],
+                "qualified_crew": [
+                    {
+                        "id": e.id,
+                        "name": e.full_name,
+                        "crew_type": e.crew_type,
+                    }
+                    for e in qualified_employees
+                ],
                 "status": "Complete" if filled else "Shortage",
                 "minimum_met": minimum_met,
                 "reason": ""
                 if filled
                 else unfilled_slot_reason(
-                    slot["qualified_only"],
+                    slot.get("qualified_only", qualified_employees),
                     qualified_employees,
                     set(assigned_employee_intervals.keys()),
                     scheduled_hours,
@@ -1226,6 +1214,8 @@ def _generate_single_day(
             }
         )
 
+    t_fill1 = time.perf_counter()
+
     total_required = sum(s["needed"] for s in generated_schedule)
     total_assigned = sum(len(s["assigned"]) for s in generated_schedule)
     total_missing = total_required - total_assigned
@@ -1233,6 +1223,14 @@ def _generate_single_day(
         max(0, s["minimum_crew"] - len(s["assigned"]))
         for s in generated_schedule
     )
+
+    t_end = time.perf_counter()
+    print(f"[TIMING] generate_full_day {schedule_date}: "
+          f"total={t_end - t_day0:.3f}s, "
+          f"build_slots={t_build1 - t_build0:.3f}s, "
+          f"fill_slots={t_fill1 - t_fill0:.3f}s, "
+          f"slots={len(slots)}, required={total_required}, "
+          f"assigned={total_assigned}, missing={total_missing}")
 
     return {
         "date": schedule_date,
