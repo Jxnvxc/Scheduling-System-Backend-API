@@ -1419,26 +1419,117 @@ async function publishSchedule() {
 
     const publishButton = document.getElementById("publishScheduleButton");
     publishButton.disabled = true;
-    try {
-        for (const day of currentWeekSchedule) {
-            const assignmentsToSave = assignmentsForDate(day.date);
-            if (assignmentsToSave.length === 0) continue;
+
+    // Check each day for conflicts first
+    const conflicts = [];
+    for (const day of currentWeekSchedule) {
+        const assignmentsToSave = assignmentsForDate(day.date);
+        if (assignmentsToSave.length === 0) continue;
+        try {
             const response = await fetch(`${API_URL}/schedules/publish`, {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
                 body: JSON.stringify({
                     schedule_date: day.date,
-                    assignments: assignmentsToSave
+                    assignments: assignmentsToSave,
+                    force: false
                 })
             });
             const data = await response.json();
             if (!response.ok) {
-                alert(`❌ Error: ${formatApiError(data.detail, "Failed to publish")}`);
+                if (response.status === 409) {
+                    conflicts.push({ date: day.date, data });
+                } else {
+                    alert(`❌ Error: ${formatApiError(data.detail, "Failed to publish")}`);
+                    await validateDraftSchedule();
+                    publishButton.disabled = currentWeekSchedule.length === 0 || !draftIsValid;
+                    return;
+                }
+            }
+        } catch (error) {
+            alert(`❌ Error: ${error.message}`);
+            await validateDraftSchedule();
+            publishButton.disabled = currentWeekSchedule.length === 0 || !draftIsValid;
+            return;
+        }
+    }
+
+    if (conflicts.length > 0) {
+        showPublishConflictModal(conflicts);
+        publishButton.disabled = currentWeekSchedule.length === 0 || !draftIsValid;
+        return;
+    }
+
+    alert("✅ Schedule published for the whole week!");
+    currentWeekSchedule = [];
+    currentWeekStartDate = null;
+    draftIsValid = false;
+    document.getElementById("generateResult").style.display = "none";
+    document.getElementById("gen_week_start").disabled = false;
+    fetchScheduleTracking();
+}
+
+let pendingConflicts = [];
+
+function showPublishConflictModal(conflicts) {
+    pendingConflicts = conflicts;
+    const messageEl = document.getElementById("publishConflictMessage");
+    const listEl = document.getElementById("publishConflictList");
+    const modal = document.getElementById("publishConflictModal");
+
+    if (messageEl) {
+        messageEl.textContent = conflicts.length === 1
+            ? "May published na schedule para sa petsang ito. Gusto mo bang i-overwrite?"
+            : `May ${conflicts.length} petsa na may published na schedule. Gusto mo bang i-overwrite ang lahat?`;
+    }
+
+    if (listEl) {
+        listEl.innerHTML = "";
+        conflicts.forEach(c => {
+            const item = document.createElement("div");
+            item.style.cssText = "padding:8px;border-bottom:1px solid var(--border-color);font-size:13px;";
+            const dateStr = new Date(c.date).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+            item.innerHTML = `<strong>${dateStr}</strong> - ${c.data.conflicts?.length || 0} assignment(s) will be replaced`;
+            listEl.append(item);
+        });
+    }
+
+    if (modal) modal.style.display = "flex";
+}
+
+function closePublishConflictModal() {
+    const modal = document.getElementById("publishConflictModal");
+    if (modal) modal.style.display = "none";
+    pendingConflicts = [];
+}
+
+async function confirmPublishWithConflict() {
+    const publishButton = document.getElementById("publishScheduleButton");
+    publishButton.disabled = true;
+
+    try {
+        for (const c of pendingConflicts) {
+            const assignmentsToSave = assignmentsForDate(c.date);
+            if (assignmentsToSave.length === 0) continue;
+            const response = await fetch(`${API_URL}/schedules/publish`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    schedule_date: c.date,
+                    assignments: assignmentsToSave,
+                    force: true
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                alert(`❌ Error publishing ${c.date}: ${formatApiError(data.detail, "Failed to publish")}`);
                 await validateDraftSchedule();
+                publishButton.disabled = currentWeekSchedule.length === 0 || !draftIsValid;
                 return;
             }
         }
 
+        closePublishConflictModal();
         alert("✅ Schedule published for the whole week!");
         currentWeekSchedule = [];
         currentWeekStartDate = null;

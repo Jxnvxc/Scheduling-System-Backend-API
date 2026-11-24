@@ -153,6 +153,7 @@ class PublishRequest(BaseModel):
 
     schedule_date: date
     assignments: List[PublishItem]
+    force: bool = False
 
 
 def _validate_schedule_request(
@@ -1303,6 +1304,39 @@ def publish_schedule(
         raise HTTPException(
             status_code=400,
             detail="Schedule cannot be published: " + " ".join(validation_errors),
+        )
+
+    # Check for existing published schedule
+    existing = db.query(ShiftAssignment).filter(
+        ShiftAssignment.branch_id == branch_id,
+        ShiftAssignment.schedule_date == payload.schedule_date,
+        ShiftAssignment.status == "Published"
+    ).first()
+
+    if existing and not payload.force:
+        # Return 409 with conflict details so frontend can show modal
+        existing_assignments = db.query(ShiftAssignment).filter(
+            ShiftAssignment.branch_id == branch_id,
+            ShiftAssignment.schedule_date == payload.schedule_date,
+            ShiftAssignment.status == "Published"
+        ).all()
+        conflict_list = []
+        for ea in existing_assignments:
+            emp = db.query(User).filter(User.id == ea.user_id).first()
+            st = db.query(Station).filter(Station.id == ea.station_id).first()
+            conflict_list.append({
+                "employee_id": ea.user_id,
+                "employee_name": emp.full_name if emp else "Unknown",
+                "station": st.name if st else "Unknown",
+                "shift": ea.shift_name,
+            })
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "A schedule is already published for this date.",
+                "conflicts": conflict_list,
+                "schedule_date": payload.schedule_date.isoformat(),
+            }
         )
 
     db.query(ShiftAssignment).filter(
